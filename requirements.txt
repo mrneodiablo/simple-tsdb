@@ -1,0 +1,30 @@
+# Simple Time-Series Database Requirements
+# Python 3.8+ required
+
+# Core dependencies (minimal for learning)
+# No external dependencies for core functionality to understand fundamentals
+
+# Optional dependencies for Week 5-6 (comparison and benchmarking)
+# Uncomment when needed:
+# influxdb-client>=1.36.0  # For InfluxDB comparison
+# matplotlib>=3.5.0        # For performance visualization
+# numpy>=1.21.0            # For statistical calculations
+# requests>=2.28.0         # For HTTP benchmarking
+# psutil>=5.9.0            # For system monitoring
+
+# Development and testing
+# pytest>=7.0.0            # For unit testing (optional)
+# black>=22.0.0            # For code formatting (optional)
+# mypy>=0.991              # For type checking (optional)
+
+# Note: We intentionally keep dependencies minimal to:
+# 1. Focus on learning core concepts
+# 2. Avoid external library complexity
+# 3. Understand algorithms from first principles
+# 4. Make the project portable and lightweight
+
+# Installation:
+# pip install -r requirements.txt
+
+# For development with optional tools:
+# pip install pytest black mypy matplotlib influxdb-client numpy requests psutil
