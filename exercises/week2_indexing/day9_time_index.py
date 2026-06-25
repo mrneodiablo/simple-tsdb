@@ -43,7 +43,10 @@ class TimeBlock:
         Two ranges overlap iff: min_ts <= end AND max_ts >= start.
         """
         # TODO: Implement the standard interval-overlap test
-        raise NotImplementedError
+        if self.min_ts <= end and self.max_ts >= start:
+            return True
+        else:
+            return False
 
 
 class TimeRangeIndex:
