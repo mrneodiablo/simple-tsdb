@@ -71,9 +71,15 @@ class TimeRangeIndex:
         (list insert). For bulk loads, prefer add_blocks() + a single sort.
         """
         # TODO: Validate min_ts <= max_ts
+        if min_ts > max_ts:
+            raise ValueError(f"min_ts {min_ts} must be <= max_ts {max_ts}")
+        
         # TODO: Find insertion index with bisect.bisect_left on self._min_keys
+        index = bisect.bisect_left(self._min_keys, min_ts)
+        
         # TODO: Insert into BOTH self._blocks and self._min_keys at that index
-        raise NotImplementedError
+        self._blocks.insert(index, TimeBlock(location, min_ts, max_ts))
+        self._min_keys.insert(index, min_ts)
 
     def add_blocks(self, blocks: List[Tuple[str, float, float]]) -> None:
         """
@@ -82,9 +88,16 @@ class TimeRangeIndex:
         Faster than repeated add_block when building the index from scratch.
         """
         # TODO: Extend self._blocks with TimeBlock(...) for each tuple
+        for location, min_ts, max_ts in blocks:
+            if min_ts > max_ts:
+                raise ValueError(f"min_ts {min_ts} must be <= max_ts {max_ts}")
+            self._blocks.append(TimeBlock(location, min_ts, max_ts))
+
         # TODO: Sort self._blocks by (min_ts, max_ts)
+        self._blocks.sort(key=lambda block: (block.min_ts, block.max_ts))
+        
         # TODO: Rebuild self._min_keys from the sorted blocks
-        raise NotImplementedError
+        self._min_keys = [block.min_ts for block in self._blocks]
 
     # ----------------------------------------------------------------- reads
     def find_blocks_in_range(self, start: float, end: float) -> List[TimeBlock]:
