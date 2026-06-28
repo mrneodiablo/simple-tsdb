@@ -115,22 +115,31 @@ class TimeRangeIndex:
         rarely overlap. (Think: what structure would remove this scan entirely?)
         """
         # TODO: Validate start <= end
+        if start > end:
+            raise ValueError(f"start {start} must be <= end {end}")
+        
         # TODO: cutoff = bisect.bisect_right(self._min_keys, end)
-        # TODO: Filter self._blocks[:cutoff] by max_ts >= start
-        raise NotImplementedError
+        cutoff = bisect.bisect_right(self._min_keys, end)
 
+        # TODO: Filter self._blocks[:cutoff] by max_ts >= start
+        result = [block for block in self._blocks[:cutoff] if block.max_ts >= start]
+        return result
+    
     def find_locations_in_range(self, start: float, end: float) -> List[str]:
         """Convenience: just the locations from find_blocks_in_range."""
-        # TODO
-        raise NotImplementedError
+        blocks = self.find_blocks_in_range(start, end)
+        return [block.location for block in blocks]
 
     def time_bounds(self) -> Optional[Tuple[float, float]]:
         """
         Overall (min_ts, max_ts) across all blocks, or None if empty.
         Useful for answering "what's the full time span of my data?".
         """
-        # TODO
-        raise NotImplementedError
+        if not self._blocks:
+            return None
+        min_ts = self._blocks[0].min_ts
+        max_ts = max(block.max_ts for block in self._blocks)
+        return (min_ts, max_ts)
 
     def __len__(self) -> int:
         return len(self._blocks)
