@@ -46,13 +46,26 @@ def _escape(value: str) -> str:
     """
     # TODO: Escape backslash first, then ',' and '=' (order matters!)
     #       e.g. "\\" -> "\\\\", "," -> "\\,", "=" -> "\\="
-    raise NotImplementedError
+    value = value.replace("\\", "\\\\")
+    value = value.replace(",", "\\,")
+    value = value.replace("=", "\\=")
+    return value
 
 
 def _unescape(value: str) -> str:
     """Reverse of _escape."""
     # TODO: Walk the string; when you see '\', take the next char literally
-    raise NotImplementedError
+    result = []
+    i = 0
+    while i < len(value):
+        if value[i] == '\\':
+            i += 1  # Skip the escape char
+            if i < len(value):
+                result.append(value[i])  # Take the next char literally
+        else:
+            result.append(value[i])
+        i += 1
+    return ''.join(result)
 
 
 class SeriesManager:
