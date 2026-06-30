@@ -41,20 +41,41 @@ class IndexSerializer:
 
     def tag_index_to_dict(self, tag_index: Dict[str, Dict[str, Set[str]]]) -> Dict[str, Any]:
         """
+        tag_index example:
+        {
+            "host":   {"server1": {"loc1", "loc2"}, "server2": {"loc3"}},
+            "region": {"us-west": {"loc1"},         "us-east": {"loc2", "loc3"}},
+        }
         Serialize the Day 8 tag index ({key:{value:set}}) to a plain dict.
 
         Wrap it with a version + type so the loader can validate it.
         """
         # TODO: Convert each inner set -> sorted list
+        data = {}
+        for k ,v in tag_index.items():
+            data[k] = {}
+            for vk, vv in v.items():
+                data[k][vk] = sorted(vv)
+
         # TODO: Return {"version": INDEX_FORMAT_VERSION, "type": "tag_index",
         #               "data": {...}}
-        raise NotImplementedError
+        return {"version": INDEX_FORMAT_VERSION, "type": "tag_index", "data": data}
 
     def dict_to_tag_index(self, payload: Dict[str, Any]) -> Dict[str, Dict[str, Set[str]]]:
         """Inverse: validate version/type, rebuild sets from lists."""
         # TODO: Check payload["version"] == INDEX_FORMAT_VERSION (else raise)
+        if payload.get("version") != INDEX_FORMAT_VERSION:
+            raise ValueError(f"Unsupported index format version: {payload.get('version')}")
         # TODO: Rebuild {key: {value: set(list)}}
-        raise NotImplementedError
+        if payload.get("type") != "tag_index":
+            raise ValueError(f"Invalid index type: {payload.get('type')}")
+        data = payload.get("data", {})
+        tag_index = {}
+        for k, v in data.items():
+            tag_index[k] = {}
+            for vk, vv in v.items():
+                tag_index[k][vk] = set(vv)
+        return tag_index
 
     def time_index_to_dict(self, blocks: List[Any]) -> Dict[str, Any]:
         """
@@ -62,12 +83,23 @@ class IndexSerializer:
         (location, min_ts, max_ts). Store them as a list of small dicts.
         """
         # TODO: Map each block -> {"location":..., "min_ts":..., "max_ts":...}
-        raise NotImplementedError
+        data = []
+        for block in blocks:
+            data.append({
+                "location": block.location,
+                "min_ts": block.min_ts,
+                "max_ts": block.max_ts
+            })
+        return {"version": INDEX_FORMAT_VERSION, "type": "time_index", "data": data}
 
     def dict_to_time_index(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Inverse: return the list of block dicts (ready to feed add_blocks)."""
         # TODO: Validate version, return payload["data"]
-        raise NotImplementedError
+        if payload.get("version") != INDEX_FORMAT_VERSION:
+            raise ValueError(f"Unsupported index format version: {payload.get('version')}")
+        if payload.get("type") != "time_index":
+            raise ValueError(f"Invalid index type: {payload.get('type')}")
+        return payload.get("data", [])
 
 
 class IndexPersistence:
