@@ -85,10 +85,23 @@ class IndexSerializer:
         # TODO: Map each block -> {"location":..., "min_ts":..., "max_ts":...}
         data = []
         for block in blocks:
+            if isinstance(block, dict):
+                location = block["location"]
+                min_ts = block["min_ts"]
+                max_ts = block["max_ts"]
+            elif hasattr(block, "location") and hasattr(block, "min_ts") and hasattr(block, "max_ts"):
+                location = block.location
+                min_ts = block.min_ts
+                max_ts = block.max_ts
+            elif isinstance(block, (tuple, list)) and len(block) >= 3:
+                location, min_ts, max_ts = block[0], block[1], block[2]
+            else:
+                raise TypeError(f"Unsupported block format: {type(block)}")
+
             data.append({
-                "location": block.location,
-                "min_ts": block.min_ts,
-                "max_ts": block.max_ts
+                "location": location,
+                "min_ts": min_ts,
+                "max_ts": max_ts
             })
         return {"version": INDEX_FORMAT_VERSION, "type": "time_index", "data": data}
 
@@ -118,7 +131,8 @@ class IndexPersistence:
         self.index_dir = index_dir
         self.serializer = IndexSerializer()
         # TODO: Ensure index_dir exists (os.makedirs(..., exist_ok=True))
-        raise NotImplementedError
+        os.makedirs(self.index_dir, exist_ok=True)
+
 
     # --------------------------------------------------------- atomic helpers
     def _atomic_write_json(self, path: str, payload: Dict[str, Any]) -> None:
@@ -128,30 +142,52 @@ class IndexPersistence:
         or the new file — never a truncated mix.
         """
         # TODO: tempfile.NamedTemporaryFile(dir=self.index_dir, delete=False)
+        temp_fd, tmp_path = tempfile.mkstemp(dir=self.index_dir)
+
         # TODO: json.dump, flush, os.fsync(fd)
+        with os.fdopen(temp_fd, 'w') as tmp_file:
+            json.dump(payload, tmp_file)
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+
         # TODO: os.replace(tmp_path, path)
-        raise NotImplementedError
+        os.replace(tmp_path, path)
 
     # --------------------------------------------------------- full snapshots
     def save_tag_index(self, tag_index: Dict[str, Dict[str, Set[str]]]) -> None:
         """Persist a full tag-index snapshot."""
         # TODO: serialize + _atomic_write_json to tag_index.json
-        raise NotImplementedError
+        payload = self.serializer.tag_index_to_dict(tag_index)
+        path = os.path.join(self.index_dir, "tag_index.json")
+        self._atomic_write_json(path, payload)
 
     def load_tag_index(self) -> Dict[str, Dict[str, Set[str]]]:
         """Load the tag-index snapshot (empty dict if file missing)."""
         # TODO: read JSON, dict_to_tag_index; handle missing file gracefully
-        raise NotImplementedError
+        path = os.path.join(self.index_dir, "tag_index.json")
+        if not os.path.exists(path):
+            return {}
+        with open(path, 'r') as f:
+            payload = json.load(f)
+        return self.serializer.dict_to_tag_index(payload)
 
     def save_time_index(self, blocks: List[Any]) -> None:
         """Persist a full time-index snapshot."""
         # TODO
-        raise NotImplementedError
+        payload = self.serializer.time_index_to_dict(blocks)
+        path = os.path.join(self.index_dir, "time_index.json")
+        self._atomic_write_json(path, payload)
+
 
     def load_time_index(self) -> List[Dict[str, Any]]:
         """Load time-index block dicts (empty list if missing)."""
         # TODO
-        raise NotImplementedError
+        path = os.path.join(self.index_dir, "time_index.json")
+        if not os.path.exists(path):
+            return []
+        with open(path, 'r') as f:
+            payload = json.load(f)
+        return self.serializer.dict_to_time_index(payload)
 
     # ------------------------------------------------------ incremental log
     def append_update(self, update: Dict[str, Any]) -> None:
@@ -165,12 +201,24 @@ class IndexPersistence:
         last full snapshot at load time, then occasionally compact.
         """
         # TODO: open(updates.log, "a"), write json.dumps(update) + "\n"
-        raise NotImplementedError
+        path = os.path.join(self.index_dir, "updates.log")
+        with open(path, 'a') as f:
+            f.write(json.dumps(update) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+
 
     def read_updates(self) -> List[Dict[str, Any]]:
         """Read and parse all incremental updates in order (empty if none)."""
         # TODO: read updates.log line by line, json.loads each
-        raise NotImplementedError
+        path = os.path.join(self.index_dir, "updates.log")
+        if not os.path.exists(path):
+            return []
+        updates = []
+        with open(path, 'r') as f:
+            for line in f:
+                updates.append(json.loads(line.strip()))
+        return updates
 
     def compact(self, tag_index: Dict[str, Dict[str, Set[str]]]) -> None:
         """
@@ -180,7 +228,10 @@ class IndexPersistence:
         this writes the new snapshot and truncates updates.log.
         """
         # TODO: save_tag_index(tag_index); then truncate/remove updates.log
-        raise NotImplementedError
+        self.save_tag_index(tag_index)
+        path = os.path.join(self.index_dir, "updates.log")
+        if os.path.exists(path):
+            os.remove(path)
 
 
 def test_index_persistence():
