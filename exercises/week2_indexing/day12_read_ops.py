@@ -79,9 +79,45 @@ class IndexedReader:
         Tip: intersect, don't union — both constraints must hold.
         """
         # TODO: tag_locs   = tag_index.lookup_multiple(...)  if tag_filters
+        if query.tag_filters:
+            tag_locs = self.tag_index.lookup_multiple(query.tag_filters)
+        else:
+            tag_locs = None  # no tag filtering
+
         # TODO: time_locs  = time_index.find_locations_in_range(...) if bounded
+        if query.start_time != float("-inf") or query.end_time != float("inf"):
+            time_locs = set(self.time_index.find_locations_in_range(query.start_time, query.end_time))
+        else:
+            time_locs = None  # no time filtering
+
         # TODO: combine via set intersection; build & return QueryPlan
-        raise NotImplementedError
+        if tag_locs is not None and time_locs is not None:
+            candidate_locations = list(tag_locs & time_locs)
+            strategy = "intersected tag + time indexes"
+            used_tag_index = True
+            used_time_index = True
+        elif tag_locs is not None:
+            candidate_locations = list(tag_locs)
+            strategy = "used tag index only"
+            used_tag_index = True
+            used_time_index = False
+        elif time_locs is not None:
+            candidate_locations = list(time_locs)
+            strategy = "used time index only"
+            used_tag_index = False
+            used_time_index = True
+        else:
+            candidate_locations = []  # or all locations if you have a way to get them
+            strategy = "no indexes used; full scan"
+            used_tag_index = False
+            used_time_index = False
+
+        return QueryPlan(
+            candidate_locations=candidate_locations,
+            used_tag_index=used_tag_index,
+            used_time_index=used_time_index,
+            strategy=strategy,
+        )
 
     # --------------------------------------------------------------- execute
     def execute(self, query: Query) -> List[Dict[str, Any]]:
@@ -97,14 +133,30 @@ class IndexedReader:
             - apply field_predicate if present (predicate pushdown)
         """
         # TODO: plan = self.plan(query)
+        plan = self.plan(query)
+
         # TODO: scan candidate_locations, filter by time + tags + field_predicate
+        results = []
+        for loc in plan.candidate_locations:
+            points = self.read_location(loc)
+            for p in points:
+                if not (query.start_time <= p["timestamp"] <= query.end_time):
+                    continue
+
+                if not all(p["tags"].get(k) == v for k, v in query.tag_filters.items()):
+                    continue
+
+                if query.field_predicate is None or query.field_predicate(p["fields"]):
+                    results.append(p)
+
         # TODO: sort results by timestamp and return
-        raise NotImplementedError
+        results.sort(key=lambda p: p["timestamp"])
+        return results
 
     def count(self, query: Query) -> int:
         """Return how many points match — without materializing them all."""
         # TODO: ideally stream and count; simplest correct version: len(execute)
-        raise NotImplementedError
+        return len(self.execute(query))
 
 
 def _point(ts, tags, fields):

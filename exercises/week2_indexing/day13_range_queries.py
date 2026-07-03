@@ -42,8 +42,26 @@ def merge_sorted_streams(
     - Use stream_index as a tie-breaker so dicts are never compared directly.
     """
     # TODO: build iterators, seed the heap with the first item of each
+    iterators = [iter(stream) for stream in streams]
+    heap = []
+    for i, it in enumerate(iterators):
+        try:
+            first_item = next(it)
+            heap.append((key(first_item), i, first_item))
+        except StopIteration:
+            continue
+    heapq.heapify(heap)
+
     # TODO: while heap: pop smallest, yield it, advance that stream
-    raise NotImplementedError
+    while heap:
+        _, i, item = heapq.heappop(heap)
+        yield item
+        try:
+            next_item = next(iterators[i])
+            heapq.heappush(heap, (key(next_item), i, next_item))
+        except StopIteration:
+            continue
+
 
 
 class RangeQueryEngine:
@@ -68,7 +86,13 @@ class RangeQueryEngine:
         """
         # TODO: iterate read_location(location); yield points with
         #       start <= ts <= end; optionally break when ts > end
-        raise NotImplementedError
+        for point in self.read_location(location):
+            ts = point["timestamp"]
+            if ts < start:
+                continue
+            if ts > end:
+                break
+            yield point
 
     def range_query(
         self, start: float, end: float, limit: Optional[int] = None
