@@ -108,17 +108,27 @@ class RangeQueryEngine:
            is lazy, so unread locations are never fully loaded).
         """
         # TODO: locations = self.time_index.find_locations_in_range(start, end)
+        locations = self.time_index.find_locations_in_range(start, end)
+
         # TODO: streams = [self._location_stream(loc, start, end) for loc ...]
+        streams = [self._location_stream(loc, start, end) for loc in locations]
+
         # TODO: yield from merge_sorted_streams(streams), respecting limit
-        raise NotImplementedError
+        merged_stream = merge_sorted_streams(streams)
+        count = 0
+        for point in merged_stream:
+            if limit is not None and count >= limit:
+                break
+            yield point
+            count += 1
+        
 
     def range_query_list(
         self, start: float, end: float, limit: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """Eager convenience wrapper returning a list (for tests / small ranges)."""
         # TODO: return list(self.range_query(...))
-        raise NotImplementedError
-
+        return list(self.range_query(start, end, limit))
 
 def _pt(ts):
     return {"timestamp": ts, "tags": {}, "fields": {"v": ts}}
