@@ -43,7 +43,12 @@ class BloomStats:
         where k=num_hashes, n=num_items, m=num_bits.
         """
         # TODO: implement the formula (guard against num_bits == 0)
-        raise NotImplementedError
+        if self.num_bits == 0:
+            return 0.0
+        k = self.num_hashes
+        n = self.num_items
+        m = self.num_bits
+        return (1 - math.exp(-k * n / m)) ** k
 
 
 class BloomFilter:
@@ -67,15 +72,19 @@ class BloomFilter:
             k = (m / n) * ln 2               # number of hash functions
         """
         # TODO: compute m (num_bits) and k (num_hashes) from the formulas above
+        m = -(expected_items * math.log(false_positive_rate)) / (math.log(2) ** 2)
+        k = (m / expected_items) * math.log(2)
+
         # TODO: round m and k up to at least 1; store an integer bit array
         #       (a Python int used as a bitset, or a bytearray)
+        self.num_bits = max(1, int(math.ceil(m)))
+        self.num_hashes = max(1, int(math.ceil(k)))
+
         self.expected_items = expected_items
         self.false_positive_rate = false_positive_rate
-        self.num_bits = 0
-        self.num_hashes = 0
         self._bits = 0  # use a big int as the bit array (bit i = (self._bits >> i) & 1)
         self._count = 0
-        raise NotImplementedError
+
 
     def _hashes(self, item: Any) -> List[int]:
         """
@@ -87,29 +96,40 @@ class BloomFilter:
         # TODO: hash str(item) with hashlib (e.g. md5/sha1), split digest into
         #       two ints h1, h2, then return [(h1 + i*h2) % num_bits for i in
         #       range(num_hashes)]
-        raise NotImplementedError
+        item_str = str(item).encode('utf-8')
+        digest = hashlib.md5(item_str).digest()  # 16 bytes
+        h1 = int.from_bytes(digest[:8], 'big')  # first 8 bytes
+        h2 = int.from_bytes(digest[8:], 'big')
+        return [(h1 + i * h2) % self.num_bits for i in range(self.num_hashes)]
 
     def add(self, item: Any) -> None:
         """Add an item: set all of its hash-position bits to 1."""
         # TODO: for pos in self._hashes(item): self._bits |= (1 << pos)
+        for pos in self._hashes(item):
+            self._bits |= (1 << pos)
+
         # TODO: increment self._count
-        raise NotImplementedError
+        self._count += 1
 
     def might_contain(self, item: Any) -> bool:
         """True if ALL the item's hash bits are set (possibly present)."""
         # TODO: return all((self._bits >> pos) & 1 for pos in self._hashes(item))
-        raise NotImplementedError
+        return all((self._bits >> pos) & 1 for pos in self._hashes(item))
 
     def add_all(self, items: Iterable[Any]) -> None:
         """Convenience: add many items."""
         # TODO
-        raise NotImplementedError
+        for item in items:
+            self.add(item)
 
     def stats(self) -> BloomStats:
         """Return a BloomStats snapshot of this filter."""
         # TODO
-        raise NotImplementedError
-
+        return BloomStats(
+            num_bits=self.num_bits,
+            num_hashes=self.num_hashes,
+            num_items=self._count,
+        )
 
 class OptimizedTagIndex:
     """
@@ -136,16 +156,25 @@ class OptimizedTagIndex:
         Also forwards to the underlying tag_index so exact lookups still work.
         """
         # TODO: create a BloomFilter for `location` if missing
+        if location not in self._filters:
+            self._filters[location] = BloomFilter(expected_items=self.expected)
+
         # TODO: for (k, v) in tag_pairs: filter.add(token); tag_index.add_entry(k, v, location)
-        raise NotImplementedError
+        for k, v in tag_pairs:
+            token = self._token(k, v)
+            self._filters[location].add(token)
+            self.tag_index.add_entry(k, v, location)
+
 
     def might_have(self, location: str, tag_key: str, tag_value: str) -> bool:
         """Cheap pre-check: could this location contain tag_key=tag_value?"""
         # TODO: if no filter for location -> be safe and return True
+        if location not in self._filters:
+            return True
         # TODO: else return filter.might_contain(token)
-        raise NotImplementedError
+        return self._filters[location].might_contain(self._token(tag_key, tag_value))
 
-    def lookup_with_skip(self, tag_key: str, tag_value: str, candidate_locations: List[str]):
+    def lookup_with_skip(self, tag_key: str, tag_value: str, candidate_locations: List[str]) -> tuple[List[str], List[str]]:
         """
         Among candidate_locations, return (matches, skipped) where:
           - matches: locations the exact index confirms contain the value
@@ -153,7 +182,15 @@ class OptimizedTagIndex:
         """
         # TODO: for each candidate, if not might_have -> count as skipped;
         #       else confirm via self.tag_index.lookup(tag_key, tag_value)
-        raise NotImplementedError
+        matches = []
+        skipped = []
+        for loc in candidate_locations:
+            if not self.might_have(loc, tag_key, tag_value):
+                skipped.append(loc)
+            else:
+                if loc in self.tag_index.lookup(tag_key, tag_value):
+                    matches.append(loc)
+        return matches, skipped
 
 
 def test_index_optimization():
@@ -198,8 +235,8 @@ def test_index_optimization():
     # s1 only lives in fileA -> fileB/fileC should mostly be skipped by bloom
     matches, skipped = opt.lookup_with_skip("host", "s1", ["fileA", "fileB", "fileC"])
     assert "fileA" in matches, "fileA truly contains host=s1"
-    assert skipped >= 1, "bloom filter should skip at least one non-matching file"
-    print(f"✓ Test 4 passed: lookup_with_skip -> matches={sorted(matches)}, skipped={skipped}")
+    assert len(skipped) >= 1, "bloom filter should skip at least one non-matching file"
+    print(f"✓ Test 4 passed: lookup_with_skip -> matches={sorted(matches)}, skipped={len(skipped)}")
 
     # Test 5: might_have never lies about presence (no false negative at file level)
     assert opt.might_have("fileA", "host", "s1") is True
