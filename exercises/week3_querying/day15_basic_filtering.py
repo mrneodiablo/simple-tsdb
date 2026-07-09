@@ -66,9 +66,28 @@ class Comparison:
         you can't compare against something that isn't there).
         """
         # TODO: pick the right sub-dict (point["tags"] or point["fields"]) from on_tag
+        sub_dict = point["tags"] if self.on_tag else point["fields"]
+
         # TODO: if key is absent -> return False
+        if self.key not in sub_dict:
+            return False
+
         # TODO: apply self.op between the point's value and self.value and return the bool
-        raise NotImplementedError
+        point_value = sub_dict[self.key]
+        if self.op == Op.EQ:
+            return point_value == self.value
+        elif self.op == Op.NE:
+            return point_value != self.value
+        elif self.op == Op.LT:
+            return point_value < self.value
+        elif self.op == Op.LE:
+            return point_value <= self.value
+        elif self.op == Op.GT:
+            return point_value > self.value
+        elif self.op == Op.GE:
+            return point_value >= self.value
+        else:
+            raise ValueError(f"Unsupported operator: {self.op}")
 
 
 class BoolKind(str, Enum):
@@ -92,7 +111,18 @@ class BoolNode:
         An empty AND is True; an empty OR is False (standard identities).
         """
         # TODO: implement short-circuit evaluation for both kinds
-        raise NotImplementedError
+        if self.kind == BoolKind.AND:
+            for child in self.children:
+                if not child.evaluate(point):
+                    return False
+            return True  # all children are True
+        elif self.kind == BoolKind.OR:
+            for child in self.children:
+                if child.evaluate(point):
+                    return True
+            return False  # all children are False
+        else:
+            raise ValueError(f"Unsupported BoolKind: {self.kind}")
 
 
 # A Predicate is either a leaf Comparison or a BoolNode combining predicates.
@@ -108,7 +138,7 @@ class FilterEngine:
     def apply(self, points: List[Point], predicate: Predicate) -> List[Point]:
         """Return the sublist of points for which predicate.evaluate(point) is True."""
         # TODO: filter points by predicate.evaluate
-        raise NotImplementedError
+        return [point for point in points if predicate.evaluate(point)]
 
     @staticmethod
     def split_for_pushdown(predicate: Predicate) -> Tuple[Optional[Predicate], Optional[Predicate]]:
@@ -128,7 +158,25 @@ class FilterEngine:
         BoolNodes count as non-tag here — we don't recurse; that's a later optimizer's job.)
         """
         # TODO: implement the partition described above
-        raise NotImplementedError
+        if isinstance(predicate, Comparison):
+            if predicate.on_tag:
+                return predicate, None
+            else:
+                return None, predicate
+        elif isinstance(predicate, BoolNode) and predicate.kind == BoolKind.AND:
+            tag_children = []
+            field_children = []
+            for child in predicate.children:
+                if isinstance(child, Comparison) and child.on_tag:
+                    tag_children.append(child)
+                else:
+                    field_children.append(child)
+            tag_part = BoolNode(BoolKind.AND, tag_children) if tag_children else None
+            field_part = BoolNode(BoolKind.AND, field_children) if field_children else None
+            return tag_part, field_part
+        else:
+            # Top-level OR or other non-splittable structure
+            return None, predicate
 
 
 # Convenience constructors so tests read nicely -----------------------------------
