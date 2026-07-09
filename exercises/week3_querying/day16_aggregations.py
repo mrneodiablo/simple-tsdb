@@ -30,7 +30,11 @@ from typing import Any, Iterable, List, Optional, Dict, Callable
 def is_number(x: Any) -> bool:
     """True if x is a real, finite number we can aggregate (bool excluded)."""
     # TODO: return True only for int/float (NOT bool) that is finite (not NaN/inf)
-    raise NotImplementedError
+    if isinstance(x, bool):
+        return False
+    if isinstance(x, (int, float)):
+        return math.isfinite(x)
+    return False
 
 
 class Aggregator(ABC):
@@ -41,7 +45,10 @@ class Aggregator(ABC):
 
     @abstractmethod
     def update(self, value: Any) -> None:
+        """Feed a single value into the aggregator."""
         ...
+
+        
 
     @abstractmethod
     def result(self) -> Optional[float]:
@@ -62,11 +69,12 @@ class Count(Aggregator):
 
     def update(self, value: Any) -> None:
         # TODO: increment only when is_number(value)
-        raise NotImplementedError
+        if is_number(value):
+            self._n += 1
 
     def result(self) -> Optional[float]:
         # TODO: return the count (as a number; 0 is valid, not None)
-        raise NotImplementedError
+        return float(self._n)
 
 
 class Sum(Aggregator):
@@ -75,12 +83,13 @@ class Sum(Aggregator):
         self._seen = False
 
     def update(self, value: Any) -> None:
-        # TODO: add numeric values; remember whether any value was seen
-        raise NotImplementedError
+        if is_number(value):
+            self._sum += value
+            self._seen = True
 
     def result(self) -> Optional[float]:
         # TODO: return the sum, or None if nothing valid was seen
-        raise NotImplementedError
+        return self._sum if self._seen else None
 
 
 class Mean(Aggregator):
@@ -96,12 +105,14 @@ class Mean(Aggregator):
         self._mean = 0.0
 
     def update(self, value: Any) -> None:
-        # TODO: for numeric values, apply the Welford update above
-        raise NotImplementedError
+        if is_number(value):
+            self._n += 1
+            delta = value - self._mean
+            self._mean += delta / self._n
 
     def result(self) -> Optional[float]:
         # TODO: return running mean, or None if n == 0
-        raise NotImplementedError
+        return self._mean if self._n > 0 else None
 
 
 class Min(Aggregator):
@@ -110,11 +121,13 @@ class Min(Aggregator):
 
     def update(self, value: Any) -> None:
         # TODO: track the smallest numeric value seen
-        raise NotImplementedError
+        if is_number(value):
+            if self._min is None or value < self._min:
+                self._min = value
 
     def result(self) -> Optional[float]:
         # TODO
-        raise NotImplementedError
+        return self._min
 
 
 class Max(Aggregator):
@@ -123,11 +136,13 @@ class Max(Aggregator):
 
     def update(self, value: Any) -> None:
         # TODO
-        raise NotImplementedError
+        if is_number(value):
+            if self._max is None or value > self._max:
+                self._max = value
 
     def result(self) -> Optional[float]:
         # TODO
-        raise NotImplementedError
+        return self._max
 
 
 # Registry: name -> factory. A query says agg="mean"; the engine builds a fresh one.
@@ -150,7 +165,13 @@ def aggregate_field(points: List[Dict[str, Any]], field_key: str, agg: str) -> O
     # TODO: look up the factory in AGGREGATORS (KeyError if unknown), build an
     #       aggregator, feed each point's field value (use .get so missing -> None),
     #       and return result().
-    raise NotImplementedError
+    if agg not in AGGREGATORS:
+        raise KeyError(f"Unknown aggregator: {agg}")
+    aggregator = AGGREGATORS[agg]()
+    for point in points:
+        value = point.get("fields", {}).get(field_key)
+        aggregator.update(value)
+    return aggregator.result()
 
 
 def test_aggregations():
