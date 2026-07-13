@@ -43,7 +43,15 @@ def exact_percentile(values: List[float], p: float) -> Optional[float]:
     p is in [0, 100]. p=50 -> median, p=0 -> min, p=100 -> max.
     """
     # TODO: implement the interpolation described above
-    raise NotImplementedError
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    n = len(sorted_values)
+    rank = p / 100 * (n - 1)
+    lo = math.floor(rank)
+    hi = math.ceil(rank)
+    frac = rank - lo
+    return sorted_values[lo] + frac * (sorted_values[hi] - sorted_values[lo])
 
 
 @dataclass
@@ -75,12 +83,16 @@ class HistogramQuantile:
         """
         # TODO: width = (hi - lo) / num_buckets; idx = int((value - lo) / width);
         #       clamp idx into [0, num_buckets-1]
-        raise NotImplementedError
+        width = (self.hi - self.lo) / self.num_buckets
+        idx = int((value - self.lo) / width)
+        return max(0, min(self.num_buckets - 1, idx))
 
     def add(self, value: float) -> None:
         """Record one value into its bucket."""
         # TODO: increment the right bucket and self._total
-        raise NotImplementedError
+        idx = self._bucket_index(value)
+        self._counts[idx] += 1
+        self._total += 1
 
     def add_all(self, values: List[float]) -> None:
         for v in values:
@@ -96,7 +108,18 @@ class HistogramQuantile:
         (Using the center keeps error within half a bucket width.)
         """
         # TODO: handle empty; compute target_rank; scan cumulative counts; return center
-        raise NotImplementedError
+        if self._total == 0:
+            return None
+        target_rank = math.ceil(p / 100 * self._total)
+        cumulative = 0
+        for i, count in enumerate(self._counts):
+            cumulative += count
+            if cumulative >= target_rank:
+                width = (self.hi - self.lo) / self.num_buckets
+                return self.lo + (i + 0.5) * width
+        # Should not reach here, but return the last bucket center as a fallback
+        width = (self.hi - self.lo) / self.num_buckets
+        return self.lo + (self.num_buckets - 0.5) * width
 
 
 def test_percentiles():
