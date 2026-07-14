@@ -51,7 +51,18 @@ def parse_duration(s: str) -> float:
     Raise ValueError on an empty string, bad number, or unknown suffix.
     """
     # TODO: split number and unit suffix; map s/m/h/d to multipliers; validate
-    raise NotImplementedError
+    if not s:
+        raise ValueError("empty duration string")
+    unit_multipliers = {'s': 1, 'm': 60, 'h': 3600, 'd': 86400}
+    num_part = s[:-1]
+    unit_part = s[-1]
+    if unit_part not in unit_multipliers:
+        raise ValueError(f"unknown duration unit: {unit_part}")
+    try:
+        num = float(num_part)
+    except ValueError:
+        raise ValueError(f"invalid duration number: {num_part}")
+    return num * unit_multipliers[unit_part]
 
 
 def window_start(timestamp: float, interval: float, origin: float = 0.0) -> float:
@@ -60,13 +71,17 @@ def window_start(timestamp: float, interval: float, origin: float = 0.0) -> floa
     to `origin` (default: the Unix epoch, so 5m windows start at :00, :05, ...).
 
         offset = timestamp - origin
-        bucket = floor(offset / interval)
+        bucket = int(offset // interval)
         return origin + bucket * interval
 
     Windows are half-open: [start, start + interval).
     """
     # TODO: implement the floor-to-boundary alignment above
-    raise NotImplementedError
+    if interval <= 0:
+        raise ValueError("interval must be positive")
+    offset = timestamp - origin
+    bucket = int(offset // interval)
+    return origin + bucket * interval
 
 
 @dataclass
@@ -118,7 +133,36 @@ class WindowAggregator:
         #      empty windows where none exist.
         #   4. build WindowResult(start=w, end=w+interval, value=agg.result(), count)
         #      sorted by start.
-        raise NotImplementedError
+        if not points:
+            return []
+        aggregators: Dict[float, Any] = {}
+        counts: Dict[float, int] = {}
+        for point in points:
+            ts = point["timestamp"]
+            w = window_start(ts, interval, origin)
+            if w not in aggregators:
+                aggregators[w] = self.agg_factory()
+                counts[w] = 0
+            aggregators[w].update(point["fields"].get(self.field_key))
+            counts[w] += 1
+
+        if fill_empty and aggregators:
+            min_w = min(aggregators.keys())
+            max_w = max(aggregators.keys())
+            w = min_w
+            while w <= max_w:
+                if w not in aggregators:
+                    aggregators[w] = None
+                    counts[w] = 0
+                w += interval
+
+        results = []
+        for w in sorted(aggregators.keys()):
+            agg = aggregators[w]
+            count = counts[w]
+            value = agg.result() if agg is not None else None
+            results.append(WindowResult(start=w, end=w+interval, value=value, count=count))
+        return results
 
 
 def _pt(ts: float, value: float) -> Dict[str, Any]:
