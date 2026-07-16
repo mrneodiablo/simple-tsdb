@@ -55,7 +55,8 @@ def make_group_key(point: Dict[str, Any], group_by: List[str]) -> GroupKey:
              -> ("us", None)
     """
     # TODO: return tuple(point["tags"].get(tag) for tag in group_by)
-    raise NotImplementedError
+    return tuple(point["tags"].get(tag) for tag in group_by)
+
 
 
 @dataclass
@@ -91,7 +92,19 @@ class GroupByEngine:
         """
         # TODO: fold points into {key: aggregator}; feed field value; track counts;
         #       build Group(...) list sorted by _sort_key(key).
-        raise NotImplementedError
+
+        groups: Dict[GroupKey, Tuple[Any, int]] = {}
+        for point in points:
+            key = make_group_key(point, group_by)
+            if key not in groups:
+                groups[key] = (self.agg_factory(), 0)
+            agg, count = groups[key]
+            agg.update(point["fields"].get(self.field_key))
+            groups[key] = (agg, count + 1)
+
+        result = [Group(key=k, value=agg.result(), count=count) for k, (agg, count) in groups.items()]
+        result.sort(key=lambda g: _sort_key(g.key))
+        return result
 
     def group_windowed(
         self,
@@ -108,7 +121,21 @@ class GroupByEngine:
         group_key (tags only); the window start is in the dict key.
         """
         # TODO: fold into {(group_key, w): aggregator}; feed values; build Groups.
-        raise NotImplementedError
+        groups: Dict[Tuple[GroupKey, float], Tuple[Any, int]] = {}
+        for point in points:
+            key = make_group_key(point, group_by)
+            window_start = window_start_fn(point["timestamp"])
+            composite_key = (key, window_start)
+            if composite_key not in groups:
+                groups[composite_key] = (self.agg_factory(), 0)
+            agg, count = groups[composite_key]
+            agg.update(point["fields"].get(self.field_key))
+            groups[composite_key] = (agg, count + 1)
+
+        return {
+            (k, w): Group(key=k, value=agg.result(), count=count)
+            for (k, w), (agg, count) in groups.items()
+        }
 
 
 def _sort_key(key: GroupKey):
