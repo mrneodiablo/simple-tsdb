@@ -46,7 +46,18 @@ def derivative(samples: List[Sample]) -> List[Sample]:
     - This is for GAUGES: it does NOT correct for resets (a drop is a real decrease).
     """
     # TODO: pairwise-iterate; emit (Δvalue/Δtime) at the later timestamp.
-    raise NotImplementedError
+    if len(samples) < 2:
+        return []
+    result = []
+    for i in range(1, len(samples)):
+        a, b = samples[i - 1], samples[i]
+        dt = b.timestamp - a.timestamp
+        if dt == 0:
+            continue
+        dv = b.value - a.value
+        result.append(Sample(timestamp=b.timestamp, value=dv / dt))
+    return result
+
 
 
 def rate(samples: List[Sample], counter: bool = True) -> List[Sample]:
@@ -64,7 +75,19 @@ def rate(samples: List[Sample], counter: bool = True) -> List[Sample]:
     """
     # TODO: for each adjacent pair, compute delta = b.value - a.value; if counter and
     #       delta < 0 -> delta = b.value (reset correction); emit delta/Δtime.
-    raise NotImplementedError
+    if len(samples) < 2:
+        return []
+    result = []
+    for i in range(1, len(samples)):
+        a, b = samples[i - 1], samples[i]
+        dt = b.timestamp - a.timestamp
+        if dt == 0:
+            continue
+        dv = b.value - a.value
+        if counter and dv < 0:
+            dv = b.value  # reset correction
+        result.append(Sample(timestamp=b.timestamp, value=dv / dt))
+    return result
 
 
 def total_increase(samples: List[Sample], counter: bool = True) -> float:
@@ -77,7 +100,16 @@ def total_increase(samples: List[Sample], counter: bool = True) -> float:
     Return 0.0 for < 2 samples.
     """
     # TODO: walk adjacent pairs; add (b.value - a.value) normally, or b.value on reset.
-    raise NotImplementedError
+    if len(samples) < 2:
+        return 0.0
+    total = 0.0
+    for i in range(1, len(samples)):
+        a, b = samples[i - 1], samples[i]
+        dv = b.value - a.value
+        if counter and dv < 0:
+            dv = b.value  # reset correction
+        total += dv
+    return total
 
 
 def rate_over_window(samples: List[Sample], counter: bool = True) -> Optional[float]:
@@ -87,13 +119,25 @@ def rate_over_window(samples: List[Sample], counter: bool = True) -> Optional[fl
     Return None for < 2 samples or zero time span.
     """
     # TODO: use total_increase and the overall time span.
-    raise NotImplementedError
+    if len(samples) < 2:
+        return None
+    dt = samples[-1].timestamp - samples[0].timestamp
+    if dt == 0:
+        return None
+    total = total_increase(samples, counter=counter)
+    return total / dt
 
 
 def samples_from_points(points: List[Dict[str, Any]], field_key: str = "value") -> List[Sample]:
     """Adapt the established point-dict stream into Samples, sorted by timestamp."""
     # TODO: build Sample(ts, point["fields"][field_key]) for numeric values, sorted.
-    raise NotImplementedError
+    samples = []
+    for point in points:
+        ts = point["timestamp"]
+        value = point["fields"][field_key]
+        samples.append(Sample(timestamp=ts, value=value))
+    samples.sort(key=lambda s: s.timestamp)
+    return samples
 
 
 def test_advanced_agg():
