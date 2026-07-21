@@ -42,7 +42,8 @@ def encode_frame(payload: bytes) -> bytes:
     Example: b"hi" -> b"\\x00\\x00\\x00\\x02hi"
     """
     # TODO: use struct.pack(">I", len(payload)) as the header, then append payload
-    raise NotImplementedError
+
+    return struct.pack(">I", len(payload)) + payload
 
 
 class FrameDecoder:
@@ -66,7 +67,19 @@ class FrameDecoder:
           - else slice out the payload, drop those bytes from the buffer, append to out
         """
         # TODO: append chunk to self._buf, then extract complete frames per the loop
-        raise NotImplementedError
+        self._buf.extend(chunk)
+        out: List[bytes] = []
+        while True:
+            if len(self._buf) < LENGTH_PREFIX:
+                break
+            length = struct.unpack(">I", self._buf[:LENGTH_PREFIX])[0]
+            if len(self._buf) < LENGTH_PREFIX + length:
+                break
+            payload = bytes(self._buf[LENGTH_PREFIX:LENGTH_PREFIX + length])
+            del self._buf[:LENGTH_PREFIX + length]
+            out.append(payload)
+        return out
+        
 
     def pending_bytes(self) -> int:
         """How many bytes are buffered but not yet a complete frame (for tests/debug)."""
@@ -89,7 +102,17 @@ def serve_connection(transport: Transport, handler: Handler, recv_size: int = 40
     # TODO: create a FrameDecoder; loop on transport.recv until it returns b"";
     #       feed each chunk, handle every decoded frame, send framed responses,
     #       count handled requests, and return the count.
-    raise NotImplementedError
+    decoder = FrameDecoder()
+    request_count = 0
+    while True:
+        chunk = transport.recv(recv_size)
+        if chunk == b"":
+            break
+        for request in decoder.feed(chunk):
+            response = handler(request)
+            transport.sendall(encode_frame(response))
+            request_count += 1
+    return request_count
 
 
 # ---------------------------------------------------------------------------
