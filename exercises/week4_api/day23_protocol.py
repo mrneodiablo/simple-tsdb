@@ -68,7 +68,10 @@ def build_request(command: Command, args: str = "") -> str:
     (No trailing space when args is empty.)
     """
     # TODO: join version + command.value + args (omit the trailing space if no args)
-    raise NotImplementedError
+    if args:
+        return f"{PROTOCOL_VERSION} {command.value} {args}"
+    else:
+        return f"{PROTOCOL_VERSION} {command.value}"
 
 
 def parse_request(text: str) -> Request:
@@ -83,7 +86,19 @@ def parse_request(text: str) -> Request:
     """
     # TODO: strip the trailing newline; split with maxsplit=2; validate version;
     #       map the command token to Command (ProtocolError if unknown); return Request
-    raise NotImplementedError
+    text = text.rstrip("\n")
+    parts = text.split(maxsplit=2)
+    if len(parts) < 2:
+        raise ProtocolError("Request must have at least version and command")
+    version, command_token = parts[0], parts[1]
+    args = parts[2] if len(parts) == 3 else ""
+    if version != PROTOCOL_VERSION:
+        raise ProtocolError(f"Unsupported protocol version: {version}")
+    try:
+        command = Command(command_token.upper())
+    except ValueError:
+        raise ProtocolError(f"Unknown command: {command_token}")
+    return Request(command=command, args=args)
 
 
 def format_response(resp: Response) -> str:
@@ -97,8 +112,10 @@ def format_response(resp: Response) -> str:
     """
     # TODO: build the status line (include code when ERROR or code != 0), then append
     #       body lines; return "\n".join(...)
-    raise NotImplementedError
-
+    status_line = f"{PROTOCOL_VERSION} {resp.status.value}"
+    if resp.status == Status.ERROR or resp.code != 0:
+        status_line += f" {resp.code}"
+    return "\n".join([status_line] + resp.body)
 
 def parse_response(text: str) -> Response:
     """
@@ -109,7 +126,23 @@ def parse_response(text: str) -> Response:
       - Raise ProtocolError on bad version or unknown status.
     """
     # TODO: split into lines; parse the status line; collect the rest as body
-    raise NotImplementedError
+    lines = text.splitlines()
+    if not lines:
+        raise ProtocolError("Response is empty")
+    status_line = lines[0]
+    parts = status_line.split(maxsplit=2)
+    if len(parts) < 2:
+        raise ProtocolError("Status line must have at least version and status")
+    version, status_token = parts[0], parts[1]
+    code = int(parts[2]) if len(parts) == 3 else 0
+    if version != PROTOCOL_VERSION:
+        raise ProtocolError(f"Unsupported protocol version: {version}")
+    try:
+        status = Status(status_token.upper())
+    except ValueError:
+        raise ProtocolError(f"Unknown status: {status_token}")
+    body = lines[1:] if len(lines) > 1 else []
+    return Response(status=status, code=code, body=body)
 
 
 def test_protocol():
