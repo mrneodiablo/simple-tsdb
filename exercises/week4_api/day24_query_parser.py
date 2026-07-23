@@ -109,7 +109,29 @@ def tokenize(text: str) -> List[Token]:
     """
     # TODO: iterate _MASTER_RE.finditer over the text, skipping whitespace, building
     #       Tokens per the rules above; raise ParseError on an unexpected character.
-    raise NotImplementedError
+
+    tokens = []
+    pos = 0
+    while pos < len(text):
+        match = _MASTER_RE.match(text, pos)
+        if match:
+            typ = match.lastgroup
+            val = match.group(typ)
+            if typ == "STRING":
+                val = val[1:-1]  # strip quotes
+            elif typ == "NUMBER":
+                val = int(val) if "." not in val else float(val)
+            elif typ == "IDENT":
+                if val.lower() in KEYWORDS:
+                    typ = "KEYWORD"
+                    val = val.lower()
+            tokens.append(Token(TokType(typ), val))
+            pos = match.end()
+        elif text[pos].isspace():
+            pos += 1
+        else:
+            raise ParseError(f"unexpected character: {text[pos]!r}")
+    return tokens
 
 
 class Parser:
@@ -146,27 +168,69 @@ class Parser:
         """Parse a full query and ensure all tokens are consumed."""
         # TODO: SELECT agg '(' field ')' FROM measurement [where] [groupby];
         #       then assert self.pos == len(self.tokens) (else ParseError: trailing tokens)
-        raise NotImplementedError
+
+        self._expect_keyword("select")
+        agg, field = self._parse_select()
+        self._expect_keyword("from")
+        measurement = self._expect(TokType.IDENT).value
+        conditions = self._parse_where()
+        group_by = self._parse_group_by()
+        if self._peek() is not None:
+            raise ParseError(f"trailing tokens: {self._peek().value!r}")
+        return Query(agg=agg, field=field, measurement=measurement, conditions=conditions, group_by=group_by)
 
     def _parse_select(self) -> tuple:
         """Parse `SELECT agg '(' IDENT ')'` -> (agg, field). Validate agg in AGG_FUNCS."""
         # TODO
-        raise NotImplementedError
+        agg_tok = self._expect(TokType.IDENT)
+        agg = agg_tok.value
+        if agg not in AGG_FUNCS:
+            raise ParseError(f"unknown aggregation function: {agg!r}")
+        self._expect(TokType.LPAREN)
+        field_tok = self._expect(TokType.IDENT)
+        self._expect(TokType.RPAREN)
+        return agg, field_tok.value
 
     def _parse_where(self) -> List[Condition]:
         """Parse `WHERE condition (AND condition)*` -> list of Conditions."""
         # TODO: only enter if the next token is the WHERE keyword; else return []
-        raise NotImplementedError
+        conditions = []
+        if self._peek() and self._peek().type == TokType.KEYWORD and self._peek().value == "where":
+            self._expect_keyword("where")
+            conditions.append(self._parse_condition())
+            while self._peek() and self._peek().type == TokType.KEYWORD and self._peek().value == "and":
+                self._expect_keyword("and")
+                conditions.append(self._parse_condition())
+        return conditions
 
     def _parse_condition(self) -> Condition:
         """Parse `IDENT op literal` -> Condition (is_string set for quoted literals)."""
         # TODO
-        raise NotImplementedError
+        key_tok = self._expect(TokType.IDENT)
+        op_tok = self._expect(TokType.OP)
+        literal_tok = self._next()
+        if literal_tok.type == TokType.STRING:
+            value = literal_tok.value
+            is_string = True
+        elif literal_tok.type == TokType.NUMBER:
+            value = literal_tok.value
+            is_string = False
+        else:
+            raise ParseError(f"expected STRING or NUMBER, got {literal_tok.type.value} ({literal_tok.value!r})")
+        return Condition(key=key_tok.value, op=op_tok.value, value=value, is_string=is_string)
 
     def _parse_group_by(self) -> List[str]:
         """Parse `GROUP BY IDENT (',' IDENT)*` -> list of tag names (or [] if absent)."""
         # TODO: only enter if the next token is the GROUP keyword; else return []
-        raise NotImplementedError
+        group_by = []
+        if self._peek() and self._peek().type == TokType.KEYWORD and self._peek().value == "group":
+            self._expect_keyword("group")
+            self._expect_keyword("by")
+            group_by.append(self._expect(TokType.IDENT).value)
+            while self._peek() and self._peek().type == TokType.COMMA:
+                self._expect(TokType.COMMA)
+                group_by.append(self._expect(TokType.IDENT).value)
+        return group_by
 
 
 def parse_query(text: str) -> Query:
