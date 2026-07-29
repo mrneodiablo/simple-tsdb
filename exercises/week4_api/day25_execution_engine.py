@@ -95,7 +95,15 @@ class ExecutionEngine:
         """
         # TODO: find the value in point["tags"] or point["fields"] (False if absent);
         #       apply _OPS[cond.op] between the point's value and cond.value.
-        raise NotImplementedError
+
+        if cond.key in point["tags"]:
+            point_value = point["tags"][cond.key]
+        elif cond.key in point["fields"]:
+            point_value = point["fields"][cond.key]
+        else:
+            return False  # Key not found in tags or fields
+        return _OPS[cond.op](point_value, cond.value)
+        
 
     def _aggregate(self, values: List[Any], agg: str) -> Optional[float]:
         """
@@ -106,7 +114,20 @@ class ExecutionEngine:
         - Raise ValueError for an unknown agg name.
         """
         # TODO: filter to numerics; handle count specially; dispatch sum/mean/min/max.
-        raise NotImplementedError
+        numeric_values = [v for v in values if _is_num(v)]
+        if agg == "count":
+            return len(numeric_values)
+        if not numeric_values:
+            return None
+        if agg == "sum":
+            return sum(numeric_values)
+        if agg == "mean":
+            return sum(numeric_values) / len(numeric_values)
+        if agg == "min":
+            return min(numeric_values)
+        if agg == "max":
+            return max(numeric_values)
+        raise ValueError(f"Unknown aggregation: {agg}")
 
     def execute(self, query: Query) -> ResultSet:
         """
@@ -122,7 +143,39 @@ class ExecutionEngine:
         matched (value follows _aggregate's empty semantics).
         """
         # TODO: implement the 5-step pipeline described above.
-        raise NotImplementedError
+        # Step 1: Read points
+        points = self.read(query.measurement)
+
+        # Step 2: Filter points based on conditions
+        filtered_points = []
+
+        for point in points:
+            for cond in query.conditions:
+                if not self._match(point, cond):
+                    break  # If any condition fails, skip this point
+            else:
+                filtered_points.append(point)  # All conditions passed
+
+        # Step 3: Group points
+        groups: Dict[Tuple[Optional[str], ...], List[Dict[str, Any]]] = {}
+        if query.group_by:
+            for point in filtered_points:
+                group_key = tuple(point["tags"].get(tag) for tag in query.group_by)
+                groups.setdefault(group_key, []).append(point)
+        else:
+            groups[()] = filtered_points  # Single global group
+
+        # Step 4: Aggregate per group
+        rows: List[Row] = []
+        for group_key, group_points in groups.items():
+            field_values = [point["fields"].get(query.field) for point in group_points]
+            agg_value = self._aggregate(field_values, query.agg)
+            tags_dict = {tag: value for tag, value in zip(query.group_by, group_key) if value is not None}
+            rows.append(Row(tags=tags_dict, value=agg_value))
+
+        # Step 5: Sort rows by group key
+        rows.sort(key=lambda r: tuple(r.tags.get(tag) for tag in query.group_by))
+        return ResultSet(agg=query.agg, field=query.field, rows=rows) 
 
 
 # ---------------------------------------------------------------------------
