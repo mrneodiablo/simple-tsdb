@@ -126,7 +126,19 @@ def validate_write(measurement: str, tags: Dict[str, str], fields: Dict[str, Any
     Return None if valid.
     """
     # TODO: check each rule above and raise ValidationError with a clear message.
-    raise NotImplementedError
+    if not isinstance(measurement, str) or not measurement.strip():
+        raise ValidationError("measurement must be a non-empty string")
+    for k, v in tags.items():
+        if not isinstance(k, str) or not k.strip():
+            raise ValidationError(f"tag key must be a non-empty string: {k!r}")
+        if not isinstance(v, str):
+            raise ValidationError(f"tag value must be a string: {v!r}")
+    if not fields:
+        raise ValidationError("fields must be non-empty")
+    for k, v in fields.items():
+        if not isinstance(v, (int, float, bool, str)):
+            raise ValidationError(f"field value must be int/float/bool/str: {v!r}")
+    return None
 
 
 def validate_query(q: str) -> None:
@@ -137,7 +149,12 @@ def validate_query(q: str) -> None:
     Return None if it passes this basic sanity check.
     """
     # TODO: implement the checks above.
-    raise NotImplementedError
+    if not isinstance(q, str) or not q.strip():
+        raise QueryError("query must be a non-empty string")
+    q_upper = q.upper()
+    if "SELECT" not in q_upper or "FROM" not in q_upper:
+        raise QueryError("query must contain both SELECT and FROM")
+    return None
 
 
 def handle_request(
@@ -160,7 +177,27 @@ def handle_request(
     """
     # TODO: dispatch on the command; wrap in try/except to map ApiError vs unexpected
     #       Exception per the rules above. Never let an exception escape this function.
-    raise NotImplementedError
+
+    try:
+        command, args = _split_request(text)
+        if command == "PING":
+            return make_ok()
+        elif command == "WRITE":
+            measurement, tags, fields, ts = _parse_write_args(args)
+            validate_write(measurement, tags, fields)
+            write_handler(measurement, tags, fields, ts)
+            return make_ok()
+        elif command == "QUERY":
+            validate_query(args)
+            rows = query_handler(args)
+            lines = [_row_to_line(row) for row in rows]
+            return make_ok(lines)
+        else:
+            raise NotFoundError(f"unknown command: {command}")
+    except ApiError as e:
+        return make_error(e.code, e.message)
+    except Exception:
+        return make_error(ErrorCode.INTERNAL, "internal error")
 
 
 def _row_to_line(row: Dict[str, Any]) -> str:

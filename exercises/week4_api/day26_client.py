@@ -83,7 +83,11 @@ class Client:
     def ping(self) -> bool:
         """Send PING; return True if the server responds OK, else False."""
         # TODO: build "TSDB/1 PING", send via _request, return True iff status is OK
-        raise NotImplementedError
+        response = self._request("TSDB/1 PING")
+        status, code, body_lines = self._parse_status(response)
+        return status == "OK"
+        
+
 
     def write(self, measurement: str, tags: Dict[str, str],
               fields: Dict[str, Any], timestamp: Optional[float] = None) -> bool:
@@ -95,7 +99,16 @@ class Client:
         """
         # TODO: build the WRITE args string, send "TSDB/1 WRITE <args>", check status
         #       (raise ServerError if the response status is ERROR).
-        raise NotImplementedError
+        tag_str = ",".join(f"{k}={v}" for k, v in tags.items())
+        field_str = ",".join(f"{k}={v}" for k, v in fields.items())
+        args = f"{measurement} {tag_str} {field_str}"
+        if timestamp is not None:
+            args += f" {int(timestamp)}"
+        response = self._request(f"TSDB/1 WRITE {args}")
+        status, code, body_lines = self._parse_status(response)
+        if status == "ERROR":
+            raise ServerError(code, "\n".join(body_lines))
+        return status == "OK"
 
     def query(self, q: str) -> List[Dict[str, Any]]:
         """
@@ -109,7 +122,23 @@ class Client:
         """
         # TODO: send "TSDB/1 QUERY <q>"; on ERROR raise ServerError; else parse each
         #       body line into a dict (split on spaces, then on '='), coercing floats.
-        raise NotImplementedError
+        response = self._request(f"TSDB/1 QUERY {q}")
+        status, code, body_lines = self._parse_status(response)
+        if status == "ERROR":
+            raise ServerError(code, "\n".join(body_lines))
+        rows = []
+        for line in body_lines:
+            row = {}
+            for pair in line.split():
+                key, value = pair.split("=", 1)
+                if key == "value":
+                    try:
+                        value = float(value)
+                    except ValueError:
+                        pass
+                row[key] = value
+            rows.append(row)
+        return rows
 
     @staticmethod
     def _parse_status(response_text: str) -> tuple:
@@ -131,7 +160,28 @@ class Client:
         """
         # TODO: collect columns in first-seen order; compute width per column; build a
         #       header row + data rows padded with str.ljust; join with "\n".
-        raise NotImplementedError
+        if not rows:
+            return "(no results)"
+        # Collect columns in first-seen order
+        columns = []
+        for row in rows:
+            for key in row.keys():
+                if key not in columns:
+                    columns.append(key)
+        # Compute width per column
+        col_widths = {col: len(col) for col in columns}
+        for row in rows:
+            for col in columns:
+                value = str(row.get(col, ""))
+                col_widths[col] = max(col_widths[col], len(value))
+        # Build header row
+        header = " | ".join(col.ljust(col_widths[col]) for col in columns)
+        # Build data rows
+        data_rows = []
+        for row in rows:
+            data_row = " | ".join(str(row.get(col, "")).ljust(col_widths[col]) for col in columns)
+            data_rows.append(data_row)
+        return "\n".join([header] + data_rows)
 
 
 # ---------------------------------------------------------------------------
