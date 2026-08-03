@@ -45,13 +45,16 @@ class OpStats:
     def total_time(self) -> float:
         """Sum of all recorded latencies (seconds)."""
         # TODO: return the sum of self.latencies
-        raise NotImplementedError
+        return sum(self.latencies)
+
 
     @property
     def mean_latency(self) -> Optional[float]:
         """Average latency, or None if no samples."""
         # TODO
-        raise NotImplementedError
+        if self.count == 0:
+            return None
+        return self.total_time / self.count
 
     @property
     def p95_latency(self) -> Optional[float]:
@@ -61,13 +64,27 @@ class OpStats:
         Return None if there are no samples.
         """
         # TODO: implement the exact-percentile interpolation for p=95
-        raise NotImplementedError
+        if not self.latencies:
+            return None
+        sorted_latencies = sorted(self.latencies)
+        n = len(sorted_latencies)
+        rank = 0.95 * (n - 1)
+        lower_index = int(math.floor(rank))
+        upper_index = int(math.ceil(rank))
+        if lower_index == upper_index:
+            return sorted_latencies[lower_index]
+        lower_value = sorted_latencies[lower_index]
+        upper_value = sorted_latencies[upper_index]
+        weight = rank - lower_index
+        return lower_value + weight * (upper_value - lower_value)
 
     @property
     def error_rate(self) -> float:
         """errors / count, or 0.0 when count == 0."""
         # TODO
-        raise NotImplementedError
+        if self.count == 0:
+            return 0.0
+        return self.errors / self.count
 
     @property
     def throughput(self) -> float:
@@ -76,7 +93,9 @@ class OpStats:
         Return 0.0 when total_time == 0 (avoid divide-by-zero).
         """
         # TODO
-        raise NotImplementedError
+        if self.total_time == 0:
+            return 0.0
+        return self.count / self.total_time
 
 
 class MetricsCollector:
@@ -98,7 +117,13 @@ class MetricsCollector:
         and bump errors when error is True. Create the OpStats entry on first use.
         """
         # TODO: get-or-create self._stats[operation]; append duration; count; errors.
-        raise NotImplementedError
+        if operation not in self._stats:
+            self._stats[operation] = OpStats()
+        op_stats = self._stats[operation]
+        op_stats.count += 1
+        op_stats.latencies.append(duration)
+        if error:
+            op_stats.errors += 1
 
     def stats(self, operation: str) -> OpStats:
         """Return the OpStats for an operation (empty OpStats if never seen)."""
