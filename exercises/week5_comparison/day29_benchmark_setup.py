@@ -48,25 +48,25 @@ class BenchmarkResult:
     def total_time(self) -> float:
         """Sum of all sample durations."""
         # TODO: return sum(self.samples)
-        raise NotImplementedError
+        return sum(self.samples)
 
     @property
     def mean(self) -> float:
         """Mean latency. Use statistics.mean (assume >= 1 sample)."""
-        # TODO
-        raise NotImplementedError
+        # TODO: return statistics.mean(self.samples)
+        return statistics.mean(self.samples)
 
     @property
     def median(self) -> float:
         """Median latency (statistics.median)."""
-        # TODO
-        raise NotImplementedError
+        # TODO: return statistics.median(self.samples)
+        return statistics.median(self.samples)
 
     @property
     def stddev(self) -> float:
         """Population standard deviation (statistics.pstdev — safe for n == 1 -> 0.0)."""
-        # TODO
-        raise NotImplementedError
+        # TODO: return statistics.pstdev(self.samples)
+        return statistics.pstdev(self.samples)
 
     @property
     def p95(self) -> float:
@@ -75,23 +75,33 @@ class BenchmarkResult:
             sort samples; rank = 0.95 * (n - 1); interpolate floor/ceil.
         """
         # TODO: sort, compute fractional rank, interpolate
-        raise NotImplementedError
+        sorted_samples = sorted(self.samples)
+        n = len(sorted_samples)
+        if n == 0:
+            return 0.0
+        rank = 0.95 * (n - 1)
+        lower_index = int(rank)
+        upper_index = min(lower_index + 1, n - 1)
+        lower_value = sorted_samples[lower_index]
+        upper_value = sorted_samples[upper_index]
+        fraction = rank - lower_index
+        return lower_value + fraction * (upper_value - lower_value)
 
     @property
     def min(self) -> float:
-        # TODO
-        raise NotImplementedError
+        # TODO: return min(self.samples) if self.samples else 0.0
+        return min(self.samples) if self.samples else 0.0
 
     @property
     def max(self) -> float:
-        # TODO
-        raise NotImplementedError
+        # TODO: return max(self.samples) if self.samples else 0.0
+        return max(self.samples) if self.samples else 0.0
 
     @property
     def ops_per_sec(self) -> float:
         """Throughput = iterations / total_time (0.0 if total_time == 0)."""
-        # TODO
-        raise NotImplementedError
+        # TODO: return self.iterations / self.total_time if self.total_time > 0 else 0.0
+        return self.iterations / self.total_time if self.total_time > 0 else 0.0
 
 
 class Benchmark:
@@ -111,7 +121,18 @@ class Benchmark:
         Return a BenchmarkResult holding the `iterations` samples.
         """
         # TODO: run warmup (untimed), then time each measured iteration and collect samples.
-        raise NotImplementedError
+        samples = []
+        # Warmup phase
+        for _ in range(warmup):
+            fn()
+        # Measured phase
+        for _ in range(iterations):
+            start = self.timer.perf_counter()
+            fn()
+            end = self.timer.perf_counter()
+            samples.append(end - start)
+        return BenchmarkResult(name=name, samples=samples)
+
 
     @staticmethod
     def speedup(faster: BenchmarkResult, slower: BenchmarkResult) -> float:
@@ -119,8 +140,8 @@ class Benchmark:
         How many times faster `faster` is than `slower`, by mean latency:
             slower.mean / faster.mean   (0.0 if faster.mean == 0)
         """
-        # TODO
-        raise NotImplementedError
+        # TODO: return slower.mean / faster.mean if faster.mean > 0 else 0.0
+        return slower.mean / faster.mean if faster.mean > 0 else 0.0
 
 
 # ---------------------------------------------------------------------------
