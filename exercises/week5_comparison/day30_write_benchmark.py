@@ -52,8 +52,21 @@ class WorkloadGenerator:
         """
         # TODO: build n dicts {measurement, timestamp (i), tags{host,region}, fields{value}}
         #       using self._rng.choice / self._rng.uniform.
-        raise NotImplementedError
-
+        points = []
+        for i in range(n):
+            point = {
+                "measurement": "cpu",
+                "timestamp": i,
+                "tags": {
+                    "host": self._rng.choice(self.HOSTS),
+                    "region": self._rng.choice(self.REGIONS),
+                },
+                "fields": {
+                    "value": self._rng.uniform(0, 100),
+                },
+            }
+            points.append(point)
+        return points
 
 @dataclass
 class WriteResult:
@@ -66,13 +79,17 @@ class WriteResult:
     def throughput(self) -> float:
         """Points per second = total_points / total_time (0.0 if total_time == 0)."""
         # TODO
-        raise NotImplementedError
+        if self.total_time == 0:
+            return 0.0
+        return self.total_points / self.total_time
 
     @property
     def mean_batch_latency(self) -> float:
         """Average time per batch = total_time / num_batches (0.0 if no batches)."""
         # TODO
-        raise NotImplementedError
+        if self.num_batches == 0:
+            return 0.0
+        return self.total_time / self.num_batches
 
 
 class WriteBenchmark:
@@ -100,12 +117,30 @@ class WriteBenchmark:
         - Time each write_fn(batch) via the injected timer and accumulate.
         """
         # TODO: generate points; iterate batches; time each write_fn(batch); build WriteResult.
-        raise NotImplementedError
+        points = self.workload.generate(total_points)
+        num_batches = (total_points + batch_size - 1) // batch_size
+        total_time = 0.0
+        for i in range(num_batches):
+            batch = points[i * batch_size : (i + 1) * batch_size]
+            start = self.timer.perf_counter()
+            self.write_fn(batch)
+            end = self.timer.perf_counter()
+            total_time += end - start
+        return WriteResult(
+            batch_size=batch_size,
+            total_points=total_points,
+            total_time=total_time,
+            num_batches=num_batches,
+        )
 
     def sweep(self, batch_sizes: List[int], total_points: int) -> List[WriteResult]:
         """Run measure() for each batch size and return the results in order."""
         # TODO
-        raise NotImplementedError
+        results = []
+        for batch_size in batch_sizes:
+            result = self.measure(batch_size, total_points)
+            results.append(result)
+        return results
 
 
 # ---------------------------------------------------------------------------
