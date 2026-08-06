@@ -50,13 +50,16 @@ class ScenarioComparison:
     def speedup(self) -> float:
         """scan_mean / indexed_mean (how many x faster indexed is; 0.0 if indexed is 0)."""
         # TODO
-        raise NotImplementedError
+        if self.indexed_mean == 0:
+            return 0.0
+        return self.scan_mean / self.indexed_mean
+        
 
     @property
     def indexed_wins(self) -> bool:
         """True if the indexed path is strictly faster than the scan."""
         # TODO
-        raise NotImplementedError
+        return self.indexed_mean < self.scan_mean
 
 
 class QueryBenchmark:
@@ -73,7 +76,13 @@ class QueryBenchmark:
     def _mean_time(self, fn: Callable[[], object], iterations: int) -> float:
         """Run fn `iterations` times, timing each with the injected timer; return mean duration."""
         # TODO: time each call (start/end via self.timer), return sum/iterations.
-        raise NotImplementedError
+        total_time = 0.0
+        for _ in range(iterations):
+            start = self.timer.perf_counter()
+            fn()
+            end = self.timer.perf_counter()
+            total_time += (end - start)
+        return total_time / iterations if iterations > 0 else 0.0
 
     def compare(self, scenario: str, indexed_fn: Callable[[], object],
                 scan_fn: Callable[[], object], iterations: int = 5) -> ScenarioComparison:
@@ -82,7 +91,9 @@ class QueryBenchmark:
         ScenarioComparison of their mean latencies.
         """
         # TODO: compute both means via _mean_time and build ScenarioComparison.
-        raise NotImplementedError
+        indexed_mean = self._mean_time(indexed_fn, iterations)
+        scan_mean = self._mean_time(scan_fn, iterations)
+        return ScenarioComparison(scenario=scenario, indexed_mean=indexed_mean, scan_mean=scan_mean)
 
     def run_suite(self, scenarios: Dict[str, Tuple[Callable[[], object], Callable[[], object]]],
                   iterations: int = 5) -> Dict[str, ScenarioComparison]:
@@ -91,7 +102,10 @@ class QueryBenchmark:
         Return name -> ScenarioComparison.
         """
         # TODO
-        raise NotImplementedError
+        results = {}
+        for name, (indexed_fn, scan_fn) in scenarios.items():
+            results[name] = self.compare(name, indexed_fn, scan_fn, iterations=iterations)
+        return results
 
 
 # ---------------------------------------------------------------------------
