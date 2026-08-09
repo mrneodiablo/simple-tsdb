@@ -91,7 +91,7 @@ class ArchitectureComparison:
     def register(self, arch: Architecture) -> None:
         """Add an architecture to the comparison set."""
         # TODO: append arch to self._archs
-        raise NotImplementedError
+        self._archs.append(arch)
 
     def score(self, arch: Architecture, workload: Workload) -> float:
         """
@@ -99,7 +99,7 @@ class ArchitectureComparison:
         for each dim present in workload.weights.
         """
         # TODO: sum arch.score_for(dim) * w for dim, w in workload.weights.items()
-        raise NotImplementedError
+        return sum(arch.score_for(dim) * w for dim, w in workload.weights.items())
 
     def recommend(self, workload: Workload) -> Architecture:
         """
@@ -108,17 +108,24 @@ class ArchitectureComparison:
         the first-registered among the top scorers.
         """
         # TODO: argmax over self._archs by self.score(arch, workload); ValueError if empty.
-        raise NotImplementedError
+        if not self._archs:
+            raise ValueError("No architectures registered for comparison.")
+        best_arch = max(self._archs, key=lambda arch: self.score(arch, workload))
+        return best_arch
 
     def ranking(self, workload: Workload) -> List[tuple]:
         """Return [(arch, score), ...] sorted by score descending (stable)."""
         # TODO: build and sort the (arch, score) pairs, highest first.
-        raise NotImplementedError
+        return sorted(
+            ((arch, self.score(arch, workload)) for arch in self._archs),
+            key=lambda pair: pair[1],
+            reverse=True,
+        )
 
     def matrix(self) -> Dict[str, Dict[str, int]]:
         """Return {arch_name: {dimension: score}} for all registered architectures."""
         # TODO
-        raise NotImplementedError
+        return {arch.name: {dim: arch.score_for(dim) for dim in DIMENSIONS} for arch in self._archs}
 
 
 # Handy pre-built workloads for the tests / lab.
