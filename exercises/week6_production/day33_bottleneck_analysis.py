@@ -50,7 +50,7 @@ class BottleneckAnalyzer:
     def total(self) -> float:
         """Sum of all operation times."""
         # TODO: return sum of self.timings.values()
-        raise NotImplementedError
+        return sum(self.timings.values())
 
     def rank(self) -> List[Hotspot]:
         """
@@ -60,7 +60,14 @@ class BottleneckAnalyzer:
         """
         # TODO: sort items by (-time, name); compute share = time/total and a running
         #       cumulative; build Hotspot objects.
-        raise NotImplementedError
+        total_time = self.total()
+        ranked_hotspots = []
+        cumulative_share = 0.0
+        for operation, time in sorted(self.timings.items(), key=lambda x: (-x[1], x[0])):
+            share = time / total_time if total_time > 0 else 0.0
+            cumulative_share += share
+            ranked_hotspots.append(Hotspot(operation, time, share, cumulative_share))
+        return ranked_hotspots
 
     def top_contributors(self, threshold: float = 0.8) -> List[Hotspot]:
         """
@@ -69,7 +76,13 @@ class BottleneckAnalyzer:
         there is any data.
         """
         # TODO: walk rank(); collect until cumulative_share >= threshold (inclusive).
-        raise NotImplementedError
+        ranked = self.rank()
+        top = []
+        for hotspot in ranked:
+            top.append(hotspot)
+            if hotspot.cumulative_share >= threshold:
+                break
+        return top
 
     @staticmethod
     def amdahl_speedup(fraction: float, component_speedup: float) -> float:
@@ -79,7 +92,7 @@ class BottleneckAnalyzer:
             overall = 1 / ((1 - fraction) + fraction / component_speedup)
         """
         # TODO: implement the formula (assume component_speedup > 0)
-        raise NotImplementedError
+        return 1 / ((1 - fraction) + fraction / component_speedup)
 
     @staticmethod
     def max_speedup(fraction: float) -> float:
@@ -88,7 +101,7 @@ class BottleneckAnalyzer:
         (fraction == 1 -> infinite; return float('inf').)
         """
         # TODO
-        raise NotImplementedError
+        return float('inf') if fraction == 1 else 1 / (1 - fraction)
 
 
 def test_bottleneck_analysis():
