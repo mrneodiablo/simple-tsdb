@@ -41,14 +41,13 @@ class OptimizationResult:
     @property
     def speedup(self) -> float:
         """baseline_time / optimized_time (0.0 if optimized_time == 0)."""
-        # TODO
-        raise NotImplementedError
+        return 0.0 if self.optimized_time == 0 else self.baseline_time / self.optimized_time
 
     @property
     def improved(self) -> bool:
         """True only if correctness holds AND the optimized version is faster."""
         # TODO: correct and optimized_time < baseline_time
-        raise NotImplementedError
+        return self.correct and self.optimized_time < self.baseline_time
 
 
 class Optimizer:
@@ -68,7 +67,8 @@ class Optimizer:
                           inputs: List[Any]) -> bool:
         """True iff optimized_fn(inp) == baseline_fn(inp) for every input."""
         # TODO: return all(baseline_fn(i) == optimized_fn(i) for i in inputs)
-        raise NotImplementedError
+        return all(baseline_fn(i) == optimized_fn(i) for i in inputs)
+
 
     def measure_total(self, fn: Callable[[Any], Any], inputs: List[Any], iterations: int) -> float:
         """
@@ -76,7 +76,14 @@ class Optimizer:
         full pass (one perf_counter before the inner loop, one after) and sum the passes.
         """
         # TODO: for each iteration, time a pass over all inputs; accumulate and return total.
-        raise NotImplementedError
+        total_time = 0.0
+        for _ in range(iterations):
+            start = self.timer.perf_counter()
+            for inp in inputs:
+                fn(inp)
+            end = self.timer.perf_counter()
+            total_time += end - start
+        return total_time
 
     def optimize(self, name: str, baseline_fn: Callable[[Any], Any],
                  optimized_fn: Callable[[Any], Any], inputs: List[Any],
@@ -90,7 +97,10 @@ class Optimizer:
         (Always measure both, even if incorrect — the numbers are still informative.)
         """
         # TODO: implement the 4 steps above.
-        raise NotImplementedError
+        correct = self.check_correctness(baseline_fn, optimized_fn, inputs)
+        baseline_time = self.measure_total(baseline_fn, inputs, iterations)
+        optimized_time = self.measure_total(optimized_fn, inputs, iterations)
+        return OptimizationResult(name, baseline_time, optimized_time, correct)
 
 
 # ---------------------------------------------------------------------------
