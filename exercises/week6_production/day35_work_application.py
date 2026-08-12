@@ -40,13 +40,13 @@ class Recommendation:
     def priority(self) -> float:
         """impact / effort (higher = do sooner). effort must be >= 1."""
         # TODO: return impact / effort
-        raise NotImplementedError
+        return self.impact / self.effort
 
     @property
     def is_quick_win(self) -> bool:
         """High impact, low effort: impact >= 4 and effort <= 2."""
-        # TODO
-        raise NotImplementedError
+        # TODO: return impact >= 4 and effort <= 2
+        return self.impact >= 4 and self.effort <= 2
 
 
 class ApplicationPlan:
@@ -57,8 +57,8 @@ class ApplicationPlan:
 
     def add(self, rec: Recommendation) -> None:
         """Add a recommendation to the plan."""
-        # TODO
-        raise NotImplementedError
+        # TODO: add the recommendation to the list
+        self._recs.append(rec)
 
     def prioritized(self) -> List[Recommendation]:
         """
@@ -66,17 +66,20 @@ class ApplicationPlan:
         impact first, then by challenge name (ascending) for determinism.
         """
         # TODO: sort by (-priority, -impact, challenge)
-        raise NotImplementedError
+        return sorted(
+            self._recs,
+            key=lambda r: (-r.priority, -r.impact, r.challenge)
+        )
 
     def quick_wins(self) -> List[Recommendation]:
         """Prioritized recommendations that are quick wins (impact>=4, effort<=2)."""
         # TODO: filter prioritized() by is_quick_win
-        raise NotImplementedError
+        return [r for r in self.prioritized() if r.is_quick_win]
 
     def top(self, n: int) -> List[Recommendation]:
         """The n highest-priority recommendations."""
         # TODO: return prioritized()[:n]
-        raise NotImplementedError
+        return self.prioritized()[:n]
 
 
 def _rec(challenge, learning, action, impact, effort) -> Recommendation:
