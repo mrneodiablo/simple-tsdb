@@ -47,7 +47,8 @@ class ReportBuilder:
     def section(self, heading: str, *lines: str) -> "ReportBuilder":
         """Add a section with a heading and zero or more body lines."""
         # TODO: append a Section(heading, list(lines)); return self
-        raise NotImplementedError
+        self._sections.append(Section(heading, list(lines)))
+        return self
 
     def metric_table(self, heading: str, metrics: Dict[str, object]) -> "ReportBuilder":
         """
@@ -61,12 +62,16 @@ class ReportBuilder:
         """
         # TODO: build the table lines (header, separator, one row per item) and store
         #       them as a Section(heading, lines); return self.
-        raise NotImplementedError
+        lines = render_markdown_table(metrics)
+        self._sections.append(Section(heading, lines))
+        return self
 
     def bullets(self, heading: str, items: List[str]) -> "ReportBuilder":
         """Add a section rendering `items` as a Markdown bullet list ('- item')."""
         # TODO: prefix each item with "- "; store as a Section; return self
-        raise NotImplementedError
+        lines = [f"- {item}" for item in items]
+        self._sections.append(Section(heading, lines))
+        return self
 
     def build(self) -> str:
         """
@@ -83,7 +88,13 @@ class ReportBuilder:
         then its lines; sections separated by a blank line; no trailing whitespace.
         """
         # TODO: assemble "# title", then each "## heading" + body, joined by blank lines.
-        raise NotImplementedError
+        report_lines = [f"# {self.title}", ""]  # H1 title + blank line
+        for section in self._sections:
+            report_lines.append(f"## {section.heading}")
+            report_lines.append("")
+            report_lines.extend(section.lines)
+            report_lines.append("")
+        return "\n".join(report_lines).rstrip()
 
 
 def render_markdown_table(metrics: Dict[str, object]) -> List[str]:
@@ -93,7 +104,10 @@ def render_markdown_table(metrics: Dict[str, object]) -> List[str]:
     An empty dict yields just the header + separator.
     """
     # TODO: return the header row, separator row, and one "| k | v |" row per item.
-    raise NotImplementedError
+    lines = ["| Metric | Value |", "| --- | --- |"]
+    for k, v in metrics.items():
+        lines.append(f"| {k} | {v} |")
+    return lines
 
 
 def test_documentation():
