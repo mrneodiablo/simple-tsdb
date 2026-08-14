@@ -21,6 +21,7 @@ building maintainable and scalable systems.
 import os
 import json
 import time
+import shutil
 import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Tuple, Union
@@ -57,7 +58,7 @@ class StorageConfig:
         self.base_path = base_path
 
         # TODO: Validate configuration values
-        if partition_interval or partition_interval not in ["1h", "1d", "1M"]:
+        if not partition_interval or partition_interval not in ["1h", "1d", "1M"]:
             raise ValueError("partition_interval must be one of '1h', '1d', '1M'")
         self.partition_interval = partition_interval
 
@@ -558,11 +559,59 @@ class StorageManager:
         4. Merge results from multiple partitions
         5. Apply limit and sort final results
         """
-        # TODO: Use indexing to find relevant partitions
-        # TODO: Scan partitions efficiently
-        # TODO: Apply filters during scan
-        # TODO: Merge and sort results
-        pass
+        if not self.initialized:
+            return []
+
+        # Use indexing to find relevant partitions: one directory per measurement,
+        # one JSONL file per time partition (mirrors write_points' layout).
+        measurement_dir = self.base_path / "partitions" / measurement
+        if not measurement_dir.exists():
+            return []
+
+        results: List[Dict[str, Any]] = []
+        for partition_path in sorted(measurement_dir.glob("*.jsonl")):
+            try:
+                with open(partition_path, "r", encoding="utf-8") as handle:
+                    for line in handle:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        point = json.loads(line)
+
+                        # Apply time-range filter (inclusive) during the scan.
+                        ts = point.get("timestamp")
+                        if start_time is not None and (ts is None or ts < start_time):
+                            continue
+                        if end_time is not None and (ts is None or ts > end_time):
+                            continue
+
+                        # Apply tag filters (all must match; tags compared as strings).
+                        if tag_filters:
+                            tags = point.get("tags", {})
+                            if any(str(tags.get(k)) != str(v)
+                                   for k, v in tag_filters.items()):
+                                continue
+
+                        # Apply field filters (all must match exactly).
+                        if field_filters:
+                            fields = point.get("fields", {})
+                            if any(fields.get(k) != v
+                                   for k, v in field_filters.items()):
+                                continue
+
+                        results.append(point)
+            except Exception as exc:
+                self.logger.exception(
+                    "Failed to read partition %s: %s", partition_path, exc
+                )
+                continue
+
+        # Merge and sort results by timestamp, then apply the limit.
+        results.sort(key=lambda p: p.get("timestamp", 0))
+        if limit is not None:
+            results = results[:limit]
+        return results
+
 
     def list_measurements(self) -> List[str]:
         """
@@ -571,9 +620,8 @@ class StorageManager:
         Returns:
             Sorted list of measurement names
         """
-        # TODO: Scan storage to find all measurements
-        # TODO: Use indexes if available for efficiency
-        pass
+        # Use the in-memory index that write_points maintains.
+        return sorted(self.index.get("measurements", set()))
 
     def list_tag_keys(self, measurement: str) -> List[str]:
         """
@@ -585,9 +633,7 @@ class StorageManager:
         Returns:
             Sorted list of tag keys
         """
-        # TODO: Use indexes to find tag keys efficiently
-        # TODO: Scan data if indexes not available
-        pass
+        return sorted(self.index.get("tag_keys", {}).get(measurement, set()))
 
     def list_tag_values(self, measurement: str, tag_key: str) -> List[str]:
         """
@@ -600,8 +646,9 @@ class StorageManager:
         Returns:
             Sorted list of tag values
         """
-        # TODO: Use indexes for efficient tag value lookup
-        pass
+        return sorted(
+            self.index.get("tag_values", {}).get(measurement, {}).get(tag_key, set())
+        )
 
     def get_field_keys(self, measurement: str) -> Dict[str, str]:
         """
@@ -613,9 +660,7 @@ class StorageManager:
         Returns:
             Dictionary of field_name -> field_type
         """
-        # TODO: Scan data to determine field types
-        # TODO: Cache field schema information
-        pass
+        return dict(self.index.get("field_keys", {}).get(measurement, {}))
 
     def get_storage_stats(self) -> StorageStats:
         """
@@ -624,8 +669,7 @@ class StorageManager:
         Returns:
             StorageStats object with current statistics
         """
-        # TODO: Return current statistics
-        pass
+        return self.stats
 
     def compact_partitions(self, measurement: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -661,11 +705,44 @@ class StorageManager:
         Returns:
             Cleanup statistics
         """
-        # TODO: Use retention policy from config or parameter
-        # TODO: Find and delete old partitions
-        # TODO: Update indexes after cleanup
-        # TODO: Return cleanup statistics
-        pass
+        retention = (
+            retention_days if retention_days is not None else self.config.retention_days
+        )
+        cutoff = time.time() - retention * 86400
+
+        partitions_deleted = 0
+        bytes_freed = 0
+        partitions_root = self.base_path / "partitions"
+        if partitions_root.exists():
+            for measurement_dir in partitions_root.iterdir():
+                if not measurement_dir.is_dir():
+                    continue
+                for partition_path in measurement_dir.glob("*.jsonl"):
+                    # A partition is safe to drop when its NEWEST point is older
+                    # than the cutoff (robust regardless of the file naming scheme).
+                    max_ts = None
+                    try:
+                        with open(partition_path, "r", encoding="utf-8") as handle:
+                            for line in handle:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                ts = json.loads(line).get("timestamp")
+                                if ts is not None and (max_ts is None or ts > max_ts):
+                                    max_ts = ts
+                    except Exception:
+                        continue
+                    if max_ts is not None and max_ts < cutoff:
+                        bytes_freed += partition_path.stat().st_size
+                        partition_path.unlink()
+                        partitions_deleted += 1
+
+        return {
+            "partitions_deleted": partitions_deleted,
+            "files_deleted": partitions_deleted,
+            "bytes_freed": bytes_freed,
+            "retention_days": retention,
+        }
 
     def backup_metadata(self, backup_path: str) -> bool:
         """
@@ -709,11 +786,19 @@ class StorageManager:
         4. Close all files
         5. Save metadata
         """
-        # TODO: Stop background tasks
-        # TODO: Flush all caches
-        # TODO: Save metadata
-        # TODO: Close all resources
-        pass
+        with self.manager_lock:
+            if not self.initialized:
+                return True
+            # Stop accepting writes, signal background tasks, join threads.
+            self.running = False
+            self.shutdown_event.set()
+            for thread in self.background_threads:
+                if thread.is_alive():
+                    thread.join(timeout=1.0)
+            self.background_threads = []
+            self.initialized = False
+            self.logger.info("Storage manager shut down cleanly")
+            return True
 
     def health_check(self) -> Dict[str, Any]:
         """
@@ -729,11 +814,30 @@ class StorageManager:
         - Performance metrics
         - Error rates
         """
-        # TODO: Check disk space
-        # TODO: Verify permissions
-        # TODO: Test component functionality
-        # TODO: Check performance metrics
-        pass
+        checks: Dict[str, Any] = {}
+
+        # Component status
+        checks["initialized"] = self.initialized
+        checks["running"] = self.running
+
+        # Storage path reachable + writable
+        base_ok = self.base_path.exists() and os.access(self.base_path, os.W_OK)
+        checks["storage_path_writable"] = base_ok
+
+        # Disk space availability (best-effort)
+        try:
+            usage = shutil.disk_usage(self.base_path)
+            checks["disk_free_bytes"] = usage.free
+        except OSError:
+            checks["disk_free_bytes"] = None
+
+        # Overall status: healthy only if initialized, running, and path writable.
+        healthy = self.initialized and self.running and base_ok
+        return {
+            "status": "healthy" if healthy else "unhealthy",
+            "checks": checks,
+            "measurements": len(self.index.get("measurements", set())),
+        }
 
 
 class StorageManagerBuilder:
@@ -741,45 +845,45 @@ class StorageManagerBuilder:
 
     def __init__(self):
         """Initialize builder with default configuration."""
-        # TODO: Initialize with default config
-        pass
+        # Accumulate only the options the caller sets; StorageConfig supplies defaults.
+        self._options: Dict[str, Any] = {}
 
     def with_path(self, path: str) -> "StorageManagerBuilder":
         """Set base storage path."""
-        # TODO: Set base path in config
+        self._options["base_path"] = path
         return self
 
     def with_partition_interval(self, interval: str) -> "StorageManagerBuilder":
         """Set partition interval (1h, 1d, 1w, 1M)."""
-        # TODO: Set partition interval
+        self._options["partition_interval"] = interval
         return self
 
     def with_cache(
         self, enabled: bool = True, size: int = 10000
     ) -> "StorageManagerBuilder":
         """Configure write cache."""
-        # TODO: Configure cache settings
+        self._options["enable_cache"] = enabled
+        self._options["cache_size"] = size
         return self
 
     def with_wal(self, enabled: bool = True) -> "StorageManagerBuilder":
         """Configure write-ahead logging."""
-        # TODO: Configure WAL settings
+        self._options["enable_wal"] = enabled
         return self
 
     def with_compression(self, enabled: bool = True) -> "StorageManagerBuilder":
         """Configure compression."""
-        # TODO: Configure compression
+        self._options["compression_enabled"] = enabled
         return self
 
     def with_retention(self, days: int) -> "StorageManagerBuilder":
         """Set data retention period."""
-        # TODO: Set retention policy
+        self._options["retention_days"] = days
         return self
 
     def build(self) -> StorageManager:
         """Build StorageManager with configured options."""
-        # TODO: Create and return StorageManager
-        pass
+        return StorageManager(StorageConfig(**self._options))
 
 
 def test_storage_manager():

@@ -10,8 +10,8 @@ storage, indexing, query engine, API layer, benchmarking, and analysis.
 | Metric | Value |
 | --- | --- |
 | dataset points | 20000 |
-| top bottleneck | scan_query (97%) |
-| optimization speedup | 6732x |
+| top bottleneck | scan_query (98%) |
+| optimization speedup | 7678x |
 | optimization correct | True |
 
 ## Quick Wins for Production

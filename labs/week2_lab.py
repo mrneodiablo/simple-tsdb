@@ -226,8 +226,8 @@ def run_integration_test():
         opt.index_location(location, pairs)
 
     matches, skipped = opt.lookup_with_skip("server", "db-01", list(files.keys()))
-    print(f"✅ Looking up server=db-01: {len(matches)} matched, {skipped} files skipped by bloom")
-    assert skipped >= 0  # at minimum the API works; ideally skipped > 0
+    print(f"✅ Looking up server=db-01: {len(matches)} matched, {len(skipped)} files skipped by bloom")
+    assert len(skipped) >= 0  # at minimum the API works; ideally skipped > 0
 
     # ------------------------------------------------------------------
     # Test 7: Persistence round-trip

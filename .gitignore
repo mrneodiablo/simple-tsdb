@@ -54,6 +54,9 @@ logs/
 
 # Data files (optional - uncomment if needed)
 # data/
+data_storage/
+lab_test_data/
+test_data/
 
 # OS files
 .DS_Store
