@@ -18,14 +18,14 @@ Design Principles:
 """
 
 # Components will be imported as they are implemented during Week 2
-# from .tag_index import TagIndex
-# from .time_index import TimeIndex
-# from .series_manager import SeriesManager
-# from .persistence import IndexPersistence
+from .tag_index import TagIndex
+from .time_index import TimeIndex
+from .series_manager import SeriesManager
+from .persistence import IndexPersistence
 
 __all__ = [
-    # "TagIndex",
-    # "TimeIndex",
-    # "SeriesManager",
-    # "IndexPersistence"
+    "TagIndex",
+    "TimeIndex",
+    "SeriesManager",
+    "IndexPersistence"
 ]
