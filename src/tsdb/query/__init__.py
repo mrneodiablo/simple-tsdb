@@ -1,34 +1,42 @@
 """
-Query Processing Engine for Time-Series Database
-===============================================
+Query Layer for Time-Series Database
+====================================
 
-This module handles query execution and data processing.
-
-Components:
-- FilterProcessor: Handles WHERE clause filtering
-- Aggregator: Implements aggregation functions (mean, sum, percentiles)
-- TimeWindow: Processes time-based windowing operations
-- QueryOptimizer: Optimizes query execution plans
-- QueryEngine: Main query coordination and execution
-
-Design Principles:
-- Streaming processing for memory efficiency
-- Predicate pushdown for performance
-- Pluggable aggregation functions
-- Time-aware query optimization
+Filtering, aggregation, windowing, grouping, and query optimization over the points
+that the storage + index layers locate. Re-exports each module's public API so callers
+can do e.g. `from tsdb.query import FilterEngine, WindowAggregator`.
 """
 
-# Components will be imported as they are implemented during Week 3
-# from .filter_processor import FilterProcessor
-# from .aggregator import Aggregator
-# from .time_window import TimeWindow
-# from .optimizer import QueryOptimizer
-# from .query_engine import QueryEngine
+from .basic_filtering import (
+    FilterEngine, Comparison, BoolNode, Op, BoolKind, tag, fld, AND, OR,
+)
+from .aggregations import (
+    Aggregator, Count, Sum, Mean, Min, Max, aggregate_field, AGGREGATORS, is_number,
+)
+from .percentiles import exact_percentile, HistogramQuantile
+from .time_windows import WindowAggregator, WindowResult, parse_duration, window_start
+from .groupby import GroupByEngine, Group, make_group_key
+from .optimization import QueryOptimizer, Plan, Stage, StageType
+from .advanced_agg import (
+    Sample, derivative, rate, total_increase, rate_over_window, samples_from_points,
+)
 
 __all__ = [
-    # "FilterProcessor",
-    # "Aggregator",
-    # "TimeWindow",
-    # "QueryOptimizer",
-    # "QueryEngine"
+    # basic_filtering
+    "FilterEngine", "Comparison", "BoolNode", "Op", "BoolKind",
+    "tag", "fld", "AND", "OR",
+    # aggregations
+    "Aggregator", "Count", "Sum", "Mean", "Min", "Max",
+    "aggregate_field", "AGGREGATORS", "is_number",
+    # percentiles
+    "exact_percentile", "HistogramQuantile",
+    # time_windows
+    "WindowAggregator", "WindowResult", "parse_duration", "window_start",
+    # groupby
+    "GroupByEngine", "Group", "make_group_key",
+    # optimization
+    "QueryOptimizer", "Plan", "Stage", "StageType",
+    # advanced_agg
+    "Sample", "derivative", "rate", "total_increase",
+    "rate_over_window", "samples_from_points",
 ]

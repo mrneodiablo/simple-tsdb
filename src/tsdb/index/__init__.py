@@ -2,30 +2,32 @@
 Indexing System for Time-Series Database
 =======================================
 
-This module provides indexing capabilities for fast data retrieval.
-
-Components:
-- TagIndex: Hash-based indexing for tag key-value pairs
-- TimeIndex: Binary search indexing for time range queries
-- SeriesManager: Manages unique series identifiers and cardinality
-- IndexPersistence: Saves and loads indexes from disk
-
-Design Principles:
-- Hash-based tag indexing for O(1) lookups
-- Binary search for time range queries
-- In-memory indexes with disk persistence
-- Cardinality tracking to prevent memory explosions
+Hash-based tag indexing, binary-search time indexing, series/cardinality management,
+persistence, indexed reads, range queries, and bloom-filter optimization. Re-exports
+each module's public API, e.g. `from tsdb.index import TagIndex, TimeRangeIndex`.
 """
 
-# Components will be imported as they are implemented during Week 2
-from .tag_index import TagIndex
-from .time_index import TimeIndex
-from .series_manager import SeriesManager
-from .persistence import IndexPersistence
+from .tag_index import TagIndex, MatchMode, TagIndexStats
+from .time_index import TimeRangeIndex, TimeBlock
+from .series_keys import SeriesManager, CardinalityReport
+from .index_persistence import IndexPersistence, IndexSerializer
+from .read_ops import IndexedReader, Query, QueryPlan
+from .range_queries import RangeQueryEngine, merge_sorted_streams
+from .index_optimization import BloomFilter, BloomStats, OptimizedTagIndex
 
 __all__ = [
-    "TagIndex",
-    "TimeIndex",
-    "SeriesManager",
-    "IndexPersistence"
+    # tag_index
+    "TagIndex", "MatchMode", "TagIndexStats",
+    # time_index
+    "TimeRangeIndex", "TimeBlock",
+    # series_keys
+    "SeriesManager", "CardinalityReport",
+    # index_persistence
+    "IndexPersistence", "IndexSerializer",
+    # read_ops
+    "IndexedReader", "Query", "QueryPlan",
+    # range_queries
+    "RangeQueryEngine", "merge_sorted_streams",
+    # index_optimization
+    "BloomFilter", "BloomStats", "OptimizedTagIndex",
 ]
