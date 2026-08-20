@@ -105,6 +105,11 @@ def validate_write(measurement: str, tags: Dict[str, str], fields: Dict[str, Any
     # TODO: check each rule above and raise ValidationError with a clear message.
     if not isinstance(measurement, str) or not measurement.strip():
         raise ValidationError("measurement must be a non-empty string")
+    # A measurement is used to build a file path — it must be a plain name, never a
+    # path. Reject path separators / traversal / absolute names (CWE-22).
+    if (measurement in (".", "..") or ".." in measurement
+            or "/" in measurement or "\\" in measurement or "\x00" in measurement):
+        raise ValidationError(f"measurement contains illegal path characters: {measurement!r}")
     for k, v in tags.items():
         if not isinstance(k, str) or not k.strip():
             raise ValidationError(f"tag key must be a non-empty string: {k!r}")

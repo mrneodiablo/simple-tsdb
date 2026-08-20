@@ -219,7 +219,7 @@ Week 4 should deliver:
 
 ---
 
-**File Location**: `/Users/dongvothanh/Data/mrneodiablo/simple-tsdb/WEEK4_PROMPT_TEMPLATE.md`
+**File Location**: `docs/WEEK4_PROMPT_TEMPLATE.md`
 
 **Last Updated**: July 2026
 **Usage**: Copy prompt sections as needed for Week 4 creation

@@ -15,6 +15,25 @@ import logging
 # For this exercise, we'll define interfaces that match what you built
 
 
+def _is_safe_measurement(name: str) -> bool:
+    """
+    True if `name` is a plain measurement name safe to use as a path component.
+
+    A measurement is turned into a directory (`<base>/partitions/<measurement>/`), so a
+    name containing a path separator, "..", or a NUL byte could escape the data
+    directory (CWE-22 path traversal). Such names are rejected.
+    """
+    return (
+        isinstance(name, str)
+        and bool(name)
+        and name not in (".", "..")
+        and ".." not in name
+        and "/" not in name
+        and "\\" not in name
+        and "\x00" not in name
+    )
+
+
 class StorageConfig:
     """Configuration for storage manager."""
 
@@ -369,6 +388,9 @@ class StorageManager:
         # TODO: Validate input points
         if not measurement or not isinstance(measurement, str):
             return False, {"error": "measurement must be a non-empty string"}
+        # Defense-in-depth: never let a measurement escape the data directory (CWE-22).
+        if not _is_safe_measurement(measurement):
+            return False, {"error": f"invalid measurement name: {measurement!r}"}
 
         if not isinstance(points, list):
             return False, {"error": "points must be a list"}
@@ -540,6 +562,9 @@ class StorageManager:
         5. Apply limit and sort final results
         """
         if not self.initialized:
+            return []
+        # Defense-in-depth: refuse to read through a path-escaping measurement (CWE-22).
+        if not _is_safe_measurement(measurement):
             return []
 
         # Use indexing to find relevant partitions: one directory per measurement,

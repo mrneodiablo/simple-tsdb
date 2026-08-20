@@ -256,7 +256,7 @@ Week 6 should deliver:
 
 ---
 
-**File Location**: `/Users/dongvothanh/Data/mrneodiablo/simple-tsdb/WEEK6_PROMPT_TEMPLATE.md`
+**File Location**: `docs/WEEK6_PROMPT_TEMPLATE.md`
 
 **Last Updated**: July 2026
 **Usage**: Copy prompt sections as needed for Week 6 creation

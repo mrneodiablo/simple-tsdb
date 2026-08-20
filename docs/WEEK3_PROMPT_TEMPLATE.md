@@ -186,7 +186,7 @@ Week 3 should deliver:
 
 ---
 
-**File Location**: `/Users/dongvothanh/Data/learning/influxdb_course/simple-timeseries-db/WEEK3_PROMPT_TEMPLATE.md`
+**File Location**: `docs/WEEK3_PROMPT_TEMPLATE.md`
 
 **Last Updated**: June 2026
 **Usage**: Copy prompt sections as needed for Week 3 creation

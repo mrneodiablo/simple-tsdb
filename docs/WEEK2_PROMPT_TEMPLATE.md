@@ -150,7 +150,7 @@ Week 2 should deliver:
 
 ---
 
-**File Location**: `/Users/dongvothanh/Data/learning/influxdb_course/simple-timeseries-db/WEEK2_PROMPT_TEMPLATE.md`
+**File Location**: `docs/WEEK2_PROMPT_TEMPLATE.md`
 
 **Last Updated**: November 2025
 **Usage**: Copy prompt sections as needed for Week 2 creation
