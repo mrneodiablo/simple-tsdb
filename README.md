@@ -1,258 +1,217 @@
-# Simple Time-Series Database
+# simple-tsdb
 
-## 🎯 Project Overview
+A minimal **time-series database built from scratch in pure Python** — storage engine,
+indexing, a query engine, and a TCP API — with **zero runtime dependencies**.
 
-A learning project to build a minimal time-series database from scratch in Python3. This project helps you understand database internals by implementing core concepts step by step.
+It started as a 6-week, 36-exercise learning journey (see [the learning story](#-the-learning-story))
+and has since "graduated" into a real, importable library under `src/tsdb/`.
 
-**Learning Goals:**
-- Understand time-series database architecture from first principles
-- Learn storage engines, indexing, query processing
-- Compare your implementation with production databases (InfluxDB)
-- Apply learnings to optimize real-world systems
+```python
+from tsdb import TimeSeriesDB
 
-## 🏗️ What You'll Build
+db = TimeSeriesDB("data/")
+db.write("cpu", tags={"host": "server1"}, fields={"usage": 75.5})
+print(db.query("SELECT mean(usage) FROM cpu WHERE host = 'server1'"))
+# -> [{'value': 75.5}]
+```
 
-A working time-series database with:
-- **Storage Layer**: File-based storage with JSON format
-- **Index Layer**: Hash-based tag indexing + time range indexing
-- **Query Layer**: Filtering, aggregation, time windows
-- **API Layer**: TCP server with simple query language
-- **Benchmarks**: Performance comparison with InfluxDB
+## ✨ Features
 
-## 📚 6-Week Learning Path
+- **Embedded API** — one `TimeSeriesDB` class: `write()` / `write_many()` / `query()`
+- **SQL-like queries** — `SELECT <agg>(field) FROM measurement WHERE ... GROUP BY ...`
+- **Storage engine** — append-only, JSON, time-partitioned files with a WAL/cache
+- **Indexing** — inverted tag index + binary-search time index + bloom filters
+- **Query engine** — filtering, aggregations, percentiles, time windows, group-by, rate/derivative
+- **TCP layer** — length-prefixed framing, a versioned text protocol, parser, client
+- **Pure standard library** — no third-party runtime deps; runs anywhere Python ≥ 3.8 does
 
-### **Phase 1: Core Implementation (Weeks 1-4)**
+## 📦 Requirements & Installation
 
-**Week 1: Storage Foundation**
-- File operations and data structures
-- Line protocol parsing
-- Time-based partitioning
-- Write operations
-- *Integration Lab*: Write 1000 data points to storage
+- Python **3.8+** (developed on 3.13)
+- No runtime dependencies
 
-**Week 2: Indexing & Retrieval**
-- Hash-based tag indexing
-- Time range indexing (binary search)
-- Series key management
-- Read operations
-- *Integration Lab*: Query data by tags and time ranges
-
-**Week 3: Query Processing**
-- Basic filtering operations
-- Aggregation functions (mean, sum, count, percentiles)
-- Time window operations
-- Simple query optimization
-- *Integration Lab*: Complex multi-dimensional queries
-
-**Week 4: API Layer**
-- TCP server implementation
-- Query language parser
-- Error handling and validation
-- Client interface
-- *Integration Lab*: Full system test via TCP client
-
-### **Phase 2: Real-World Application (Weeks 5-6)**
-
-**Week 5: Comparison & Analysis**
-- Performance benchmarking vs InfluxDB
-- Architecture comparison (TSM vs your approach)
-- Feature analysis and trade-offs
-- Bottleneck identification
-- *Lab*: Load testing both systems
-
-**Week 6: Production Application**
-- Apply learnings to optimize work systems
-- Design production-ready improvements
-- Create technical documentation
-- Knowledge sharing preparation
-- *Final Lab*: Present findings and recommendations
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.8+
-- Basic understanding of databases and networking
-- Completed InfluxDB Module 7 (Architecture Deep Dive)
-
-### Setup
 ```bash
-git clone <your-repo>
-cd simple-timeseries-db
-pip install -r requirements.txt
+git clone <your-repo-url> simple-tsdb
+cd simple-tsdb
+pip install -e .          # installs the `tsdb` package from src/
 ```
 
-### Your First Exercise
+> Prefer not to install? You can run straight from source with `PYTHONPATH=src`:
+> ```bash
+> PYTHONPATH=src python -c "from tsdb import TimeSeriesDB; print('ok')"
+> ```
+
+## 🚀 Quickstart
+
+```python
+from tsdb import TimeSeriesDB
+
+# Opens (creates) an on-disk database at ./data
+db = TimeSeriesDB("data/", partition_interval="1d", retention_days=30)
+
+# Write points: measurement, tags (indexed strings), fields (any value)
+db.write("cpu", tags={"host": "server1", "region": "us"}, fields={"usage": 70.0})
+db.write("cpu", tags={"host": "server1", "region": "us"}, fields={"usage": 80.0})
+db.write("cpu", tags={"host": "server2", "region": "eu"}, fields={"usage": 30.0})
+
+# Bulk write
+db.write_many("cpu", [
+    {"tags": {"host": "server3", "region": "eu"}, "fields": {"usage": 40.0}, "timestamp": 1700000000},
+])
+
+db.measurements()                                   # -> ['cpu']
+db.query("SELECT mean(usage) FROM cpu")             # -> [{'value': 55.0}]
+db.query("SELECT max(usage) FROM cpu GROUP BY region")
+# -> [{'region': 'eu', 'value': 40.0}, {'region': 'us', 'value': 80.0}]
+
+db.close()                                          # or use `with TimeSeriesDB(...) as db:`
+```
+
+## 🔎 Query language
+
+```
+SELECT <agg>(<field>) FROM <measurement> [WHERE <cond> [AND <cond> ...]] [GROUP BY <tag> [, <tag> ...]]
+```
+
+- **Aggregations**: `mean`, `sum`, `count`, `min`, `max`
+- **WHERE**: comparisons `=  !=  <  <=  >  >=`, combined with `AND` (string literals in `'quotes'`, numbers bare)
+- **GROUP BY**: one or more tag keys
+- Each result row is `{<group tag>: <value>, ..., "value": <aggregated value>}`
+
+> Advanced operators — **percentiles**, **time windows** (`aggregateWindow`), and
+> **rate/derivative** — are available through the library API (`tsdb.query`) but are not
+> part of the SQL grammar above.
+
+## 🧩 Library API (per layer)
+
+The facade is enough for most uses, but every layer is importable on its own:
+
+```python
+from tsdb.storage import StorageManager, DataPoint          # storage engine
+from tsdb.index   import TagIndex, TimeRangeIndex, BloomFilter
+from tsdb.query   import (FilterEngine, aggregate_field,     # query building blocks
+                          exact_percentile, WindowAggregator, GroupByEngine, rate)
+from tsdb.server  import (parse_query, ExecutionEngine,      # API building blocks
+                          Client, serve_connection, handle_request)
+```
+
+## 🌐 Running the TCP server
+
+The database can also run as a networked server over its own length-prefixed wire
+protocol.
+
+**Terminal 1 — start the server:**
+
 ```bash
-cd exercises/week1_storage
-python day1_file_operations.py
+python -m tsdb --host 127.0.0.1 --port 8080 --data ./data
+# tsdb: listening on 127.0.0.1:8080 (data → data)
 ```
 
-## 📁 Project Structure
+(`--port 0` picks a free port automatically; `Ctrl-C` shuts it down cleanly.)
 
-```
-simple-timeseries-db/
-├── README.md                    # This file
-├── CURRICULUM.md               # Detailed 6-week curriculum
-├── CONCEPTS.md                 # Theory and concepts explanation
-├── requirements.txt            # Python dependencies
-├── exercises/                  # Daily coding exercises
-│   ├── week1_storage/          # 7 exercises + checkpoints
-│   ├── week2_indexing/         # 7 exercises + checkpoints
-│   ├── week3_querying/         # 7 exercises + checkpoints
-│   ├── week4_api/              # 7 exercises + checkpoints
-│   ├── week5_comparison/       # 4 exercises + benchmarks
-│   └── week6_production/       # 4 exercises + final project
-├── labs/                       # Integration labs (weekly)
-│   ├── week1_lab.py           # Test storage layer
-│   ├── week2_lab.py           # Test indexing layer
-│   ├── week3_lab.py           # Test query layer
-│   ├── week4_lab.py           # Test full system
-│   ├── week5_lab.py           # Performance comparison
-│   └── week6_lab.py           # Final system demonstration
-├── src/tsdb/                   # Core implementation
-│   ├── __init__.py
-│   ├── storage/               # Storage engine
-│   │   ├── __init__.py
-│   │   ├── file_manager.py
-│   │   ├── serializer.py
-│   │   └── partitioner.py
-│   ├── index/                 # Indexing system
-│   │   ├── __init__.py
-│   │   ├── tag_index.py
-│   │   ├── time_index.py
-│   │   └── series_manager.py
-│   ├── query/                 # Query processing
-│   │   ├── __init__.py
-│   │   ├── filter.py
-│   │   ├── aggregator.py
-│   │   └── optimizer.py
-│   └── server/                # API layer
-│       ├── __init__.py
-│       ├── tcp_server.py
-│       ├── query_parser.py
-│       └── client.py
-├── tests/                     # Unit tests (leetcode style)
-│   ├── test_storage.py
-│   ├── test_index.py
-│   ├── test_query.py
-│   └── test_server.py
-├── benchmarks/                # Performance testing
-│   ├── benchmark_write.py
-│   ├── benchmark_read.py
-│   └── compare_influxdb.py
-├── docs/                      # Documentation
-│   ├── architecture.md       # System architecture
-│   ├── storage_design.md     # Storage layer design
-│   ├── indexing_strategy.md  # Indexing approach
-│   └── query_processing.md   # Query execution
-└── data/                      # Sample datasets
-    ├── sample_metrics.json
-    ├── load_test_data.json
-    └── time_series_patterns.json
+**Terminal 2 — talk to it with the built-in client:**
+
+```python
+import socket
+from tsdb.server import Client
+
+client = Client(socket.create_connection(("127.0.0.1", 8080)))
+
+client.ping()                                                   # True
+client.write("temp", {"room": "server"}, {"celsius": 22.5})     # True
+client.write("temp", {"room": "lobby"},  {"celsius": 19.0})
+client.query("SELECT mean(celsius) FROM temp GROUP BY room")
+# -> [{'room': 'lobby', 'value': 19.0}, {'room': 'server', 'value': 22.5}]
 ```
 
-## 🎯 Learning Philosophy
+Or embed the server in your own process:
 
-### Why Build From Scratch?
-- **Deep Understanding**: Implement core algorithms yourself
-- **Debug Skills**: Learn how systems fail and recover
-- **Interview Prep**: Explain database internals from first principles
-- **Career Growth**: Unique insights that AI can't provide
+```python
+import threading
+from tsdb import TSDBServer
 
-### Exercise Design Principles
-- **<100 lines per exercise**: Focus on concepts, not complexity
-- **Sequential building**: Each exercise builds on previous ones
-- **Real-world connection**: Link to InfluxDB and other production DBs
-- **Incremental enhancement**: Revisit previous layers with new requirements
+server = TSDBServer(host="127.0.0.1", port=8080, data_path="data")
+threading.Thread(target=server.serve_forever, daemon=True).start()
+# ... use a Client to talk to it ...
+server.stop()
+```
 
-### Testing Strategy
-- **Unit tests**: Leetcode-style problem validation
-- **Integration labs**: End-to-end system verification
-- **Benchmarks**: Performance measurement and comparison
-- **Mini-checkpoints**: Frequent validation to catch issues early
+A minimal-dependency loopback example (server thread + client round-trip) also lives
+in [`labs/week4_lab.py`](labs/week4_lab.py).
 
-## 📊 Success Metrics
+## 🗂️ Project structure
 
-By the end of 6 weeks, you will have:
+```
+simple-tsdb/
+├── src/tsdb/                 # ← THE PRODUCT (importable library)
+│   ├── __init__.py           #   exports TimeSeriesDB + TSDBServer
+│   ├── database.py           #   TimeSeriesDB — embedded engine (write / query)
+│   ├── service.py            #   TSDBServer — networked TCP server (wraps TimeSeriesDB)
+│   ├── __main__.py           #   `python -m tsdb` → runs the server
+│   ├── storage/              #   file ops, serialization, partitioning, WAL, manager
+│   ├── index/                #   tag index, time index, series keys, bloom filters
+│   ├── query/                #   filtering, aggregation, percentiles, windows, group-by
+│   └── server/               #   protocol building blocks: framing, parser, engine, client
+├── exercises/                # ← THE LEARNING MATERIAL (36 daily exercises, weeks 1–6)
+├── labs/                     #   weekly end-to-end integration demos (week1_lab … week6_lab)
+├── docs/                     #   architecture / design notes + capstone report
+├── pyproject.toml            #   packaging (pip install -e .)
+├── CURRICULUM.md             #   the 6-week plan
+└── CONCEPTS.md               #   theory & concepts
+```
 
-**Week 1-4 Milestones:**
-- [ ] Working storage engine that persists data to JSON files
-- [ ] Tag and time-based indexing for fast queries
-- [ ] Query processor with filtering and aggregation
-- [ ] TCP server accepting and processing queries
+`src/tsdb/` is what you **import and run**. `exercises/` and `labs/` are the learning
+journey behind it — kept as documentation, not imported by the product.
 
-**Week 5-6 Milestones:**
-- [ ] Performance comparison showing your DB vs InfluxDB characteristics
-- [ ] Technical analysis of architecture trade-offs
-- [ ] Applied optimizations to real work systems
-- [ ] Comprehensive documentation and knowledge sharing
+## 🛠️ Development
 
-**Learning Outcomes:**
-- [ ] Can explain database storage engines from first principles
-- [ ] Understand indexing strategies and their trade-offs
-- [ ] Can optimize query performance in production systems
-- [ ] Have unique insights to share with your team
-- [ ] Prepared for database-focused technical interviews
+Run the library quickstart to smoke-test an install:
 
-## 🤝 How to Use This Project
+```bash
+python -c "from tsdb import TimeSeriesDB; import tempfile; \
+d=TimeSeriesDB(tempfile.mkdtemp()); d.write('m',{'h':'a'},{'v':1}); \
+print(d.query('SELECT sum(v) FROM m'))"
+```
 
-### Daily Routine (30-60 minutes)
-1. Read the exercise description and concepts
-2. Implement the solution (aim for <100 LOC)
-3. Run the unit tests to verify correctness
-4. Document your learnings and observations
+Run any weekly integration lab (end-to-end demonstrations):
 
-### Weekly Routine
-1. Complete 4-7 daily exercises
-2. Run the integration lab to test the full system
-3. Review and refactor code if needed
-4. Plan the next week's learning
+```bash
+python labs/week6_lab.py     # capstone: profile → optimize → report
+python labs/week4_lab.py     # full TCP round-trip over a real loopback socket
+```
 
-### Learning Tips
-- **Don't rush**: Understanding is more important than speed
-- **Debug actively**: When things break, investigate why
-- **Compare approaches**: Think about alternatives and trade-offs
-- **Document insights**: Keep notes for future reference
-- **Ask questions**: Why does this approach work? What are the limitations?
+Run a single learning exercise:
 
-## 🔗 Related Resources
+```bash
+python exercises/week3_querying/day16_aggregations.py
+```
 
-**Background Reading:**
-- InfluxDB Module 7: Architecture Deep Dive (prerequisite)
-- [Database Internals Book](https://databass.dev/)
-- [Designing Data-Intensive Applications](https://dataintensive.net/)
+Optional dev tools: `pip install -e ".[dev]"` (pytest, black, mypy).
 
-**Production References:**
-- [InfluxDB TSM Engine](https://docs.influxdata.com/influxdb/v2/reference/internals/storage-engine/)
-- [Time Series Database Papers](https://github.com/xephonhq/awesome-time-series-database)
+## 📚 The learning story
 
-**Implementation Inspiration:**
-- [Build Your Own Database](https://build-your-own.org/database/)
-- [Let's Build a Simple Database](https://cstack.github.io/db_tutorial/)
+This database was built the hard way, on purpose — implementing every core algorithm
+from first principles over six weeks:
 
-## 📞 Support & Discussion
+| Week | Theme | Highlights |
+|------|-------|-----------|
+| 1 | Storage | file I/O, line protocol, partitioning, batch writes, compression |
+| 2 | Indexing | inverted tag index, binary-search time index, series cardinality, bloom filters |
+| 3 | Query processing | filters, streaming aggregations, percentiles, time windows, group-by, rate |
+| 4 | API layer | TCP framing, wire protocol, lexer/parser, execution engine, client, monitoring |
+| 5 | Comparison | benchmark harness, write/query performance, architecture analysis vs InfluxDB |
+| 6 | Production | bottleneck profiling, optimization with proof, applied recommendations, docs |
 
-- **Questions**: Document in `docs/questions.md`
-- **Issues**: Track in `docs/issues_encountered.md`
-- **Learnings**: Share in `docs/insights.md`
-- **Team sharing**: Use final documentation in Week 6
+See [CURRICULUM.md](CURRICULUM.md) for the day-by-day plan and [CONCEPTS.md](CONCEPTS.md)
+for the theory. Each exercise is self-contained with its own tests.
 
----
+## ⚠️ Limitations
 
-## 🚦 Next Steps
+This is a **learning-grade** database, not a production one. JSON storage, in-memory
+indexes, single-node, no authentication, and no crash-safe durability guarantees.
+For production time-series workloads use a mature engine (e.g. InfluxDB) — the point
+here is to understand how one works.
 
-1. **Read [CURRICULUM.md](CURRICULUM.md)** for detailed daily exercises
-2. **Review [CONCEPTS.md](CONCEPTS.md)** for theoretical background
-3. **Start with Week 1, Day 1**: `exercises/week1_storage/day1_file_operations.py`
-4. **Set up development environment** with `pip install -r requirements.txt`
+## 📄 License
 
-**Remember**: The goal isn't to build the next InfluxDB. It's to understand how databases work so you can be a better engineer.
-
-Good luck with your learning journey! 🎉
-
----
-
-**Project Version**: 1.0
-**Created**: November 2025
-**Learning Time**: 6 weeks (3-4 hours/week)
-**Difficulty**: Intermediate (requires basic Python and database concepts)
+MIT

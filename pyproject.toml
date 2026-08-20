@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simple-tsdb"
+version = "1.0.0"
+description = "A minimal time-series database built from scratch in pure Python (storage, indexing, query engine, TCP API)."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = ["time-series", "database", "tsdb", "learning"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "black>=22.0", "mypy>=0.991"]
+
+[project.urls]
+Documentation = "https://github.com/mrneodiablo/simple-tsdb#readme"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+tsdb = ["py.typed"]
